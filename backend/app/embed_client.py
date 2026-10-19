@@ -22,7 +22,27 @@ class EmbedClient:
     async def embed(self, image_bytes: bytes, filename: str, content_type: str) -> list[float]:
         """Return the normalized embedding for one image."""
         files = {"file": (filename, image_bytes, content_type)}
-        response = await self._request("POST", "/embed", files=files)
+        return self._vector(await self._request("POST", "/embed", files=files))
+
+    async def embed_text(self, text: str) -> list[float]:
+        """Return the normalized SigLIP text embedding, in the same space as image embeddings."""
+        return self._vector(await self._request("POST", "/embed/text", json={"text": text}))
+
+    async def embed_batch(self, images: list[tuple[bytes, str, str]]) -> list[list[float]]:
+        """Normalized embeddings for several (bytes, filename, content_type) images in one request, in order."""
+        files = [("files", (filename, data, content_type)) for data, filename, content_type in images]
+        response = await self._request("POST", "/embed/batch", files=files)
+        try:
+            body = response.json()
+            vectors, dimension = body["embeddings"], body["embedding_dimension"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise EmbeddingServiceError(f"Embedding service returned an unexpected response: {exc}") from exc
+        if len(vectors) != len(images) or any(len(v) != dimension for v in vectors):
+            raise EmbeddingServiceError(f"Expected {len(images)} vectors of {dimension} values from /embed/batch")
+        return vectors
+
+    @staticmethod
+    def _vector(response: httpx.Response) -> list[float]:
         try:
             body = response.json()
             embedding = body["embedding"]

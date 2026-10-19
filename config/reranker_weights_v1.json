@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "description": "Hand-set starting weights (not tuned). Ranges: 5th percentile to just above the 99th percentile of similarity between different catalogue items of the same category (catalogue only, no eval queries), measured 2026-10-20 on the 71-image sample catalogue, SigLIP 2 Base 224.",
+  "modes": {
+    "image": {
+      "weights": {"image": 0.55, "caption": 0.15, "gray": 0.0, "region": 0.30},
+      "ranges": {"image": [0.59, 0.95], "caption": [0.03, 0.19], "gray": [0.61, 0.95], "region": [0.68, 0.95]}
+    },
+    "text": {
+      "weights": {"image": 0.3, "caption": 0.7, "gray": 0.0, "region": 0.0},
+      "ranges": {"image": [0.03, 0.19], "caption": [0.54, 0.9]}
+    }
+  },
+  "boost_scale": 10.0,
+  "boost_cap": 0.1
+}

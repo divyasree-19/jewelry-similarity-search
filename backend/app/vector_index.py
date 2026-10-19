@@ -27,7 +27,8 @@ def index_dir_name(model_name: str, embedding_version: str) -> str:
 
 
 def normalize(vectors) -> np.ndarray:
-    array = np.ascontiguousarray(np.atleast_2d(np.asarray(vectors, dtype=np.float32)))
+    # Always a private copy: normalize_L2 works in place, and inputs may be read-only memory maps
+    array = np.array(np.atleast_2d(vectors), dtype=np.float32, order="C", copy=True)
     faiss.normalize_L2(array)
     return array
 

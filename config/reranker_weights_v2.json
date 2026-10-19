@@ -1,0 +1,154 @@
+{
+  "version": "v2",
+  "description": "Tuned on the tune split from v1; ranges, boost scale and cap unchanged from v1.",
+  "modes": {
+    "image": {
+      "weights": {
+        "image": 0.0,
+        "caption": 0.8,
+        "gray": 0.0,
+        "region": 0.2
+      },
+      "ranges": {
+        "image": [
+          0.59,
+          0.95
+        ],
+        "caption": [
+          0.03,
+          0.19
+        ],
+        "gray": [
+          0.61,
+          0.95
+        ],
+        "region": [
+          0.68,
+          0.95
+        ]
+      }
+    },
+    "text": {
+      "weights": {
+        "image": 0.4,
+        "caption": 0.6,
+        "gray": 0.0,
+        "region": 0.0
+      },
+      "ranges": {
+        "image": [
+          0.03,
+          0.19
+        ],
+        "caption": [
+          0.54,
+          0.9
+        ]
+      }
+    }
+  },
+  "boost_scale": 10.0,
+  "boost_cap": 0.1,
+  "tuned": {
+    "image": {
+      "split": "tune",
+      "queries": 36,
+      "query_ids": [
+        "q001",
+        "q002",
+        "q003",
+        "q005",
+        "q006",
+        "q007",
+        "q008",
+        "q010",
+        "q011",
+        "q013",
+        "q014",
+        "q017",
+        "q018",
+        "q019",
+        "q020",
+        "q021",
+        "q022",
+        "q023",
+        "q026",
+        "q028",
+        "q030",
+        "q031",
+        "q032",
+        "q033",
+        "q034",
+        "q036",
+        "q038",
+        "q039",
+        "q041",
+        "q042",
+        "q044",
+        "q045",
+        "q046",
+        "q047",
+        "q048",
+        "q049"
+      ],
+      "search": "grid step 0.05",
+      "weight_sets_evaluated": 231,
+      "objective": "recall@5, then mrr@10",
+      "base_version": "v1",
+      "base_tune_metrics": {
+        "n": 36,
+        "recall@1": 0.8611,
+        "recall@5": 0.9167,
+        "recall@10": 0.9444,
+        "mrr@10": 0.8877
+      },
+      "tune_metrics": {
+        "n": 36,
+        "recall@1": 0.8889,
+        "recall@5": 1.0,
+        "recall@10": 1.0,
+        "mrr@10": 0.9329
+      },
+      "created_at": "2026-10-19T18:23:03+00:00"
+    },
+    "text": {
+      "split": "tune",
+      "queries": 14,
+      "query_ids": [
+        "t01",
+        "t02",
+        "t03",
+        "t05",
+        "t06",
+        "t09",
+        "t11",
+        "t12",
+        "t13",
+        "t14",
+        "t17",
+        "t18",
+        "t19",
+        "t20"
+      ],
+      "search": "grid step 0.05",
+      "weight_sets_evaluated": 21,
+      "objective": "recall@5, then mrr@10",
+      "base_version": "v1",
+      "base_tune_metrics": {
+        "n": 14,
+        "recall@1": 0.8571,
+        "recall@5": 0.9286,
+        "recall@10": 1.0,
+        "mrr@10": 0.9008
+      },
+      "tune_metrics": {
+        "n": 14,
+        "recall@1": 0.9286,
+        "recall@5": 0.9286,
+        "recall@10": 1.0,
+        "mrr@10": 0.9375
+      },
+      "created_at": "2026-10-19T18:23:50+00:00"
+    }
+  }
+}

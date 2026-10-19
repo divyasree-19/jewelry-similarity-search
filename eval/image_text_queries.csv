@@ -1,0 +1,9 @@
+query_id,query_path,text,category,expected_product_ids,tags
+it01,data/queries/q006.jpg,same style but in white gold with an elephant,bracelets,BR-005,metal;motif
+it02,data/queries/q046.jpg,with a silver cross instead of a black one,necklaces,NK-010,metal;motif
+it03,data/queries/q048.jpg,pink swirl glass instead,pendants,PD-009,colour;motif
+it04,data/queries/q044.jpg,with grooves instead of beaded edges,rings,RG-011,motif
+it05,data/queries/q042.jpg,on a black cord,bracelets,BR-002;BR-005,material
+it06,data/queries/q034.jpg,in rose gold with purple stones,earrings,ER-001,metal;colour
+it07,data/queries/q005.jpg,similar but in silver,necklaces,NK-002;NK-004;NK-007;NK-010,metal
+it08,data/queries/q009.jpg,similar but in silver,necklaces,NK-002;NK-004;NK-007;NK-010,metal

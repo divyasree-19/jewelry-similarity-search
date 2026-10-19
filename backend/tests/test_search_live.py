@@ -1,9 +1,12 @@
 """End-to-end search against the running stack: real SigLIP service, MongoDB and the ingested indexes.
 
-Skipped unless /health is ok and scripts/ingest.py has been run.
+Skipped unless /health is ok and scripts/ingest.py has been run. Runs with SEARCH_HYBRID=false: this checks
+the image index itself. With hybrid on, a catalogue image whose own caption ranks low can lose first place
+(BR-007_02, 70/71) - see the Stage 8 notes in the README.
 """
 
 import csv
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +17,23 @@ from app.config import PROJECT_ROOT, get_settings
 
 @pytest.fixture(scope="module")
 def client():
+    # test the image index itself
+    pinned = {"SEARCH_HYBRID": "false", "FEATURE_REGION_RERANK": "false", "SEARCH_RERANKER": "false"}
+    previous = {key: os.environ.get(key) for key in pinned}
+    os.environ.update(pinned)
     get_settings.cache_clear()
+    try:
+        yield from _client()
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        get_settings.cache_clear()
+
+
+def _client():
     with TestClient(main.app) as test_client:
         if test_client.get("/health").status_code != 200:
             pytest.skip("SigLIP service or MongoDB is not running")

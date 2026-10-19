@@ -17,8 +17,10 @@ from pymongo.errors import PyMongoError
 
 from app import main
 from app.config import get_settings
+from app.clients.llm_client import LLMError, ParsedQuery
 from app.embed_client import EmbeddingServiceError
 from app.preprocessing import PreprocessOptions, encode, preprocess
+from app.tagging.schema import QueryTags
 from app.vector_index import CategoryIndexes
 
 MONGO_URI = "mongodb://localhost:27017"
@@ -39,8 +41,28 @@ class FakeEmbedClient:
             raise EmbeddingServiceError("Cannot reach embedding service")
         return fake_vector(image_bytes)
 
+    async def embed_text(self, text):
+        """Text naming a fixture picture, e.g. "blue square", embeds like that picture."""
+        colour, shape = text.split()[:2]
+        return fake_vector(encode(preprocess(jpeg(picture(shape, colour)), PreprocessOptions())))
+
     async def health(self):
         return {"model": "fake"}
+
+    async def aclose(self):
+        pass
+
+
+class FakeLLMClient:
+    """parse_query returns the QueryTags registered for a text."""
+
+    def __init__(self, replies: dict[str, QueryTags] | None = None):
+        self.replies = replies or {}
+
+    async def parse_query(self, text):
+        if text not in self.replies:
+            raise LLMError("LLM is down")
+        return ParsedQuery(self.replies[text])
 
     async def aclose(self):
         pass
@@ -61,6 +83,9 @@ def jpeg(image: Image.Image) -> bytes:
     image.save(buffer, format="JPEG", quality=95)
     return buffer.getvalue()
 
+
+# Metal in each image's VLM tags (for "in silver" refinement tests)
+METAL = {"RG-1": "gold", "RG-2": "gold", "RG-3": "silver", "PD-1": "gold"}
 
 # image_id, product_id, project_id, category, subcategory, picture
 CATALOGUE = [
@@ -98,6 +123,7 @@ def catalogue(tmp_path, monkeypatch):
         db.images.insert_one({
             "_id": image_id, "product_id": product_id, "project_id": project_id, "category": category,
             "subcategory": subcategory, "image_path": str(path), "vector_id": vector_id,
+            "vlm_tags": {"metal": [METAL[product_id]], "gemstones": [], "motifs": []},
         })
         db.products.update_one({"_id": product_id}, {"$set": {
             "project_id": project_id, "category": category, "subcategory": subcategory,
@@ -111,6 +137,9 @@ def catalogue(tmp_path, monkeypatch):
         "MONGO_URI": MONGO_URI, "MONGO_DB": db_name, "EMBED_BACKEND": "siglip2_224",
         "FAISS_INDEX_DIR": str(tmp_path / "faiss"), "CATALOGUE_DIR": str(catalogue_dir),
         "CATEGORIES_FILE": str(categories), "QUERY_IMAGE_DIR": str(tmp_path / "uploads"), "MAX_UPLOAD_MB": "0.5",
+        "FEATURES_DIR": str(tmp_path / "features"),
+        "FEATURE_REGION_RERANK": "false",  # Stage 8 path; tests/test_features.py switches features on
+        "SEARCH_RERANKER": "false",  # tests/test_reranker.py switches it on
     }.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()
@@ -126,6 +155,10 @@ def catalogue(tmp_path, monkeypatch):
 def client(catalogue):
     with TestClient(main.app) as test_client:
         main.app.state.embed_client = FakeEmbedClient()
+        main.app.state.llm_client = FakeLLMClient({
+            "similar but in silver": QueryTags(metal=["silver"], semantic_query="silver jewellery"),
+            "blue square ring": QueryTags(category="rings", semantic_query="blue square ring"),
+        })
         yield test_client
 
 
@@ -208,7 +241,7 @@ def test_upload_validation(client, catalogue):
         (search(client, jpeg(Image.new("RGB", (40, 40), "red"))), 400, "at least 128 px"),
         (search(client, files["RG-2_a"], top_k="0"), 400, "top_k must be between 1 and 50"),
         (search(client, files["RG-2_a"], top_k="ten"), 400, "top_k"),
-        (client.post("/search/image", files={"file": ("q.jpg", files["RG-2_a"], "image/jpeg")}), 400, "category: Field required"),
+        (client.post("/search/image", data={"category": "rings"}), 400, "file: Field required"),
     ]
     for response, status, message in cases:
         assert response.status_code == status, response.text
@@ -239,3 +272,89 @@ def test_cors_allows_only_the_frontend_origin(client):
     blocked = client.options("/search/image", headers={
         "Origin": "http://evil.example", "Access-Control-Request-Method": "POST"})
     assert "access-control-allow-origin" not in blocked.headers
+
+
+# ---- Stage 8: image + text refinement, category detection, text search, debug -----------------
+
+def product_ids(response) -> list[str]:
+    return [r["product_id"] for r in response.json()["results"]]
+
+
+def test_in_silver_ranks_silver_first_without_removing_others(client, catalogue):
+    files, _ = catalogue
+    image_only = search(client, files["RG-1_a"])
+    refined = search(client, files["RG-1_a"], text="similar but in silver")
+    assert product_ids(image_only)[0] == "RG-1"
+    assert product_ids(refined)[0] == "RG-3"  # the silver ring jumps to the top
+    assert sorted(product_ids(refined)) == sorted(product_ids(image_only))  # nothing removed
+    body = refined.json()
+    assert body["mode"] == "image_text" and body["parsed_text"]["metal"] == ["silver"]
+
+
+def test_in_silver_with_hard_filter_keeps_only_silver(client, catalogue, monkeypatch):
+    files, _ = catalogue
+    monkeypatch.setattr(main.app.state.settings, "refine_metal_hard_filter", True)
+    assert product_ids(search(client, files["RG-1_a"], text="similar but in silver")) == ["RG-3"]
+
+
+def test_unparseable_refinement_falls_back_to_image_only(client, catalogue):
+    files, _ = catalogue
+    body = search(client, files["RG-1_a"], text="something the fake LLM does not know").json()
+    assert body["results"][0]["product_id"] == "RG-1" and "searched by image only" in body["warnings"][0]
+
+
+def test_missing_category_is_detected(client, catalogue, monkeypatch):
+    files, _ = catalogue
+
+    async def rank(embed_client, vector, categories, scale):
+        return [("rings", 0.9), ("pendants", 0.1)]
+    monkeypatch.setattr(main.app.state.category_detector, "rank", rank)
+    response = client.post("/search/image", files={"file": ("q.jpg", files["RG-2_a"], "image/jpeg")})
+    body = response.json()
+    assert response.status_code == 200
+    assert (body["category"], body["category_source"], body["category_confidence"]) == ("rings", "detected", 0.9)
+    assert body["results"][0]["product_id"] == "RG-2"
+
+
+def test_low_confidence_asks_for_the_category(client, catalogue, monkeypatch):
+    files, _ = catalogue
+
+    async def rank(embed_client, vector, categories, scale):
+        return [("rings", 0.45), ("pendants", 0.40), ("bangles", 0.15)]
+    monkeypatch.setattr(main.app.state.category_detector, "rank", rank)
+    body = client.post("/search/image", files={"file": ("q.jpg", files["RG-2_a"], "image/jpeg")}).json()
+    assert body["needs_category"] is True and body["results"] == [] and body["category"] is None
+    assert [c["category"] for c in body["category_candidates"]] == ["rings", "pendants", "bangles"]
+
+
+def test_debug_block_shows_ranks_and_scores(client, catalogue):
+    files, _ = catalogue
+    body = search(client, files["RG-2_a"], debug="true").json()
+    top = body["results"][0]
+    assert top["similarity_score"] == pytest.approx(1.0, abs=1e-3)  # image cosine for display
+    assert top["debug"]["image_rank"] == 1 and top["debug"]["caption_rank"] is None  # no caption index here
+    assert top["debug"]["rrf_score"] == pytest.approx(1 / 61, abs=1e-6)
+    assert body["debug"]["flags"]["hybrid"] is True and "plan" in body["debug"]
+    assert {"preprocess", "embed", "model_calls", "analyse", "search", "metadata", "rank", "total"} <= set(body["timings_ms"])
+    assert "debug" not in search(client, files["RG-2_a"]).json()["results"][0]
+
+
+def test_text_search(client, catalogue):
+    response = client.post("/search/text", json={"text": "blue square ring", "top_k": 3})
+    body = response.json()
+    assert response.status_code == 200, body
+    assert body["mode"] == "text" and body["category"] == "rings" and body["category_source"] == "text"
+    assert body["results"][0]["product_id"] == "RG-2"
+    assert all(r["category"] == "rings" for r in body["results"])  # category is a hard filter
+
+
+def test_text_search_without_llm_uses_the_raw_text_across_categories(client, catalogue):
+    body = client.post("/search/text", json={"text": "green square"}).json()
+    assert body["results"][0]["product_id"] == "PD-1"
+    assert body["searched_categories"] == ["pendants", "rings"] and "could not parse" in body["warnings"][0]
+
+
+def test_text_search_validation(client, catalogue):
+    assert client.post("/search/text", json={"text": "   "}).status_code == 400
+    assert client.post("/search/text", json={"text": "ring", "category": "watches"}).status_code == 400
+    assert client.post("/search/text", json={"text": "ring", "category": "bangles"}).status_code == 404

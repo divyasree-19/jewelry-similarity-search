@@ -1,0 +1,21 @@
+query_id,text,category,expected_product_ids,tags,split
+t01,red ruby ring,rings,RG-007,gemstone;colour,tune
+t02,nine stone navaratna ring,rings,RG-007,motif,tune
+t03,gold ring with a diamond heart,rings,RG-002;RG-012,metal;motif;near_duplicate,tune
+t04,plain gold wedding band,rings,RG-003;RG-011,metal;style;near_duplicate,holdout
+t05,ring with a big pink stone surrounded by diamonds,rings,RG-008,colour;gemstone,tune
+t06,black ring covered in tiny diamonds,rings,RG-010,metal;gemstone,tune
+t07,rose gold earrings with purple amethyst,earrings,ER-001,metal;gemstone;colour,holdout
+t08,green stone drop earrings,earrings,ER-005,colour,holdout
+t09,gold leaf earrings with pearls,earrings,ER-013,metal;motif;gemstone,tune
+t10,earrings with dark red garnet,earrings,ER-008;ER-013,gemstone;colour,holdout
+t11,silver necklace with a cross,necklaces,NK-004;NK-010,metal;motif;near_duplicate,tune
+t12,chunky gold chain necklace,necklaces,NK-008;NK-005,metal;style,tune
+t13,coral and turquoise beaded necklace,necklaces,NK-012,gemstone,tune
+t14,pink glass heart pendant,pendants,PD-009;PD-004,colour;motif;near_duplicate,tune
+t15,amber pendant on a black cord,pendants,PD-011,gemstone,holdout
+t16,leopard pendant,pendants,PD-005,motif,holdout
+t17,evil eye charm bracelet,bracelets,BR-002;BR-005;BR-006,motif,tune
+t18,evil eye with an elephant,bracelets,BR-005,motif;no_category,tune
+t19,rose gold bangle with diamonds,bracelets,BR-001,metal;gemstone,tune
+t20,turquoise beads on leather,bracelets,BR-009,gemstone;no_category,tune

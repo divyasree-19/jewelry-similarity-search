@@ -8,11 +8,16 @@ must then be re-ingested.
 from dataclasses import dataclass
 from io import BytesIO
 
-from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageCms, ImageFilter, ImageOps, UnidentifiedImageError
 
 from app.config import Settings, get_settings
 
 PREPROCESS_VERSION = "pp-v1"
+# Versions of the derived variants (Stage 9). Bump one when its output changes; the main pipeline is unaffected.
+GRAY_VERSION = "gray-v1"
+EDGE_VERSION = "edge-v1"
+TILES_VERSION = "tiles-v1"
+TILE_SIZE = 224  # SigLIP 2 Base input size; tiles are sent at this size
 
 WHITE = (255, 255, 255)
 
@@ -72,6 +77,40 @@ def preprocess(image_bytes: bytes, options: PreprocessOptions | None = None) -> 
 
     # Scale the long side to target_size and centre on white; the aspect ratio is kept
     return ImageOps.pad(image, (options.target_size, options.target_size), Image.Resampling.LANCZOS, color=WHITE)
+
+
+def to_grayscale(image: Image.Image) -> Image.Image:
+    """Colour-free copy of a preprocessed image, as 3 identical channels (SigLIP expects RGB). Same size."""
+    return image.convert("L").convert("RGB")
+
+
+def to_edge_map(image: Image.Image) -> Image.Image:
+    """Dark outlines on white of a preprocessed image (3 channels, same size): shape only, no colour or shading."""
+    gray = image.convert("L").filter(ImageFilter.GaussianBlur(1))
+    edges = ImageOps.autocontrast(gray.filter(ImageFilter.FIND_EDGES), cutoff=1)
+    return ImageOps.invert(edges).convert("RGB")
+
+
+def make_tiles(image: Image.Image, grid: int) -> list[Image.Image]:
+    """A centre crop (middle half of each side) followed by grid x grid tiles, row by row, each TILE_SIZE square.
+
+    Returns 1 + grid * grid images. Works on the preprocessed square image.
+    """
+    if grid < 1:
+        raise ValueError("grid must be at least 1")
+    width, height = image.size
+    crops = [(width // 4, height // 4, width * 3 // 4, height * 3 // 4)]
+    for row in range(grid):
+        for column in range(grid):
+            crops.append((column * width // grid, row * height // grid,
+                          (column + 1) * width // grid, (row + 1) * height // grid))
+    return [image.crop(box).resize((TILE_SIZE, TILE_SIZE), Image.Resampling.LANCZOS) for box in crops]
+
+
+def variant_signature(signature: str, variant: str, grid: int | None = None) -> str:
+    """Signature of a derived feature, e.g. "pp-v1/512/gray-v1" or "pp-v1/512/tiles-v1/3x3"."""
+    version = {"gray": GRAY_VERSION, "edge": EDGE_VERSION, "tiles": TILES_VERSION}[variant]
+    return f"{signature}/{version}" + (f"/{grid}x{grid}" if variant == "tiles" else "")
 
 
 def encode(image: Image.Image) -> bytes:

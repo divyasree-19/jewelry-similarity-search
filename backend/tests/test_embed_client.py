@@ -50,3 +50,14 @@ async def test_embed_dimension_mismatch():
     with pytest.raises(EmbeddingServiceError, match="does not match"):
         await client.embed(b"img", "ring.jpg", "image/jpeg")
     await client.aclose()
+
+
+async def test_embed_text_posts_json():
+    def handler(request):
+        assert request.url.path == "/embed/text"
+        assert request.read() == b'{"text":"gold ring"}'
+        return httpx.Response(200, json={"embedding_dimension": 2, "embedding": [0.6, 0.8]})
+
+    client = make_client(handler)
+    assert await client.embed_text("gold ring") == [0.6, 0.8]
+    await client.aclose()

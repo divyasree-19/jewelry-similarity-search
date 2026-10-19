@@ -305,3 +305,210 @@ python -m pytest -q scripts/tests eval/tests
 
 The 384 weights were downloaded with
 `hf download google/siglip2-base-patch16-384 --local-dir ~/siglip2-base-384/model` (1.3 GB, outside the repo).
+
+### Stage 7 — VLM attribute tagging and caption embeddings
+
+**Part A, feasibility** (`scripts/qwen_feasibility.py`, results in `eval/results/qwen_feasibility.json`):
+- **Hosted:** Qwen3-VL-8B on the hosted vLLM server (`QWEN_API_KEY_API_BASE`, full precision). 20/20 replies
+  were valid JSON, at 12.1 s/image one at a time and **2.76 s/image with 4 in parallel**.
+- **Local:** not run. This laptop has 16 GB RAM (about 5 GB free) and no NVIDIA GPU, so 4-bit Qwen would run in swap.
+- **Verdict:** use the hosted server. That's about 3 min for the 71 sample images, but about 30 days for the
+  955k client catalogue at that rate; the full catalogue needs a dedicated GPU or higher agreed concurrency.
+
+**Part B, tagging.** Search ranking is unchanged (that is Stage 8).
+
+| File | What it does |
+|---|---|
+| `backend/app/tagging/vocab.py` | Allowed values per field, synonyms (`yellow gold` → `gold`), `normalize()`. Motifs are marked provisional. |
+| `backend/app/tagging/schema.py` | Pydantic `Tags`: only vocabulary values, no duplicates, no extra keys, non-empty description. |
+| `backend/app/tagging/prompts.py` | Tagging prompt (lists the allowed values) and retry prompt. |
+| `backend/app/clients/vlm_client.py` | Calls `VLM_SERVICE_URL` (OpenAI-compatible), retries once on invalid JSON, maps synonyms, drops and reports unknown values, validates. |
+| `scripts/tag_catalogue.py` | Resumable batch job: saves `vlm_tags` on each image with `tagger_model`, `quantization`, `tagger_version`. |
+| `ai-service/app.py` | New `POST /embed/text`: SigLIP 2 text vector (padded to 64 tokens, normalized). `embed_client.embed_text()` calls it. |
+| `backend/app/caption_store.py` | Per-category caption FAISS indexes under `FAISS_INDEX_DIR/captions/<model>_<version>/`, same `vector_id`s as the image index. |
+| `scripts/build_caption_index.py` | Embeds each description and rebuilds the caption indexes, then compares them with the image index. |
+| `scripts/tag_spotcheck.py` | `export` writes `eval/tag_spotcheck.csv` (50 random images) to mark by hand; `score` prints accuracy per field. |
+
+`vlm-service/` was not built: the GPU server already exposes an OpenAI-compatible API. `TAGGER_VERSION`
+(`tags-p1-v1`) changes whenever the prompt or vocabulary changes, and `tag_catalogue.py` re-tags images with
+another version. Settings: `VLM_SERVICE_URL`, `VLM_MODEL_NAME`, key from `VLM_API_KEY` or `QWEN_API_KEY`,
+`VLM_QUANTIZATION`, `VLM_CONCURRENCY` (4).
+
+Results on the sample catalogue:
+- **Tagging:** 71/71 images tagged in 3.5 min, 0 failures, 7 needed the JSON retry, 0 values dropped.
+  71/71 saved tag records pass the schema.
+- **Captions:** every category has as many captions as images, with the same vector IDs.
+- **VLM category vs catalogue category:** they differ on 13 images. Most are pendants on a chain tagged
+  `necklaces`, or plain necklaces tagged `chains`. Search uses the catalogue category, so this only matters
+  if VLM categories are used later.
+- **Agreement with `products.csv`** (automatic; the manual spot-check is still to be marked):
+
+  | Field | exact | overlap |
+  |---|---:|---:|
+  | category | 78% | 78% |
+  | metal | 59% | 76% |
+  | gemstones | 31% | 41% |
+  | stone_colors | 40% | 57% |
+  | motifs | 24% | 70% |
+  | style | 40% | 40% |
+
+How to run each check:
+
+```bash
+python scripts/tag_catalogue.py --check              # schema: "71/71 saved tag records valid (100%)"
+python scripts/build_caption_index.py --check        # caption count = image count per category
+python scripts/tag_spotcheck.py score                # per-field accuracy (after marking eval/tag_spotcheck.csv)
+cd backend && pytest -q tests/test_tagging.py        # schema, synonyms, invalid JSON, unknown values
+```
+
+Rebuild the SigLIP image after changing `ai-service/app.py`:
+`docker compose build siglip2-api && docker compose up -d siglip2-api`.
+
+### Stage 8 — Query analysis, hybrid search, text queries and refinement
+`app/search.py` is split into a package:
+
+```
+app/search/   common.py · query_analysis.py · hybrid.py · boosts.py · image_search.py · text_search.py
+app/routes/   search_image.py (POST /search/image) · search_text.py (POST /search/text) · catalogue.py
+app/clients/  llm_client.py (text query parsing; reuses the hosted Qwen endpoint)
+```
+
+- **`POST /search/image`:**
+  - `category` is optional. If it's missing, SigLIP zero-shot picks it. Below `CATEGORY_CONFIDENCE_THRESHOLD`
+    the response has `needs_category: true` and the top 3 `category_candidates` instead of results.
+  - The optional `text` refines the search ("similar but in silver"), and `debug=true` adds image/caption
+    ranks, RRF score and boosts per result.
+- **Search:** the query vector searches the image index and the caption index (top 100 each), and the two
+  lists are fused with RRF (k=60). Boosts then add small bonuses for matching tags; they never remove results.
+- **Image-only queries** never use stone colour or metal. Gemstones and motifs come from Qwen tagging of the
+  query image, which is off by default because it adds a Qwen call per search.
+- **`POST /search/text`** `{"text", "category"?, "project_id"?, "top_k"?, "debug"?}`:
+  - Qwen parses the text into vocabulary values plus a `semantic_query`, which SigLIP embeds as text (lowercased).
+  - The category is a hard filter, kept only if the text names it. With none, all categories are searched
+    (`TEXT_NO_CATEGORY`). Stone colours are kept only if the user wrote them.
+  - If the LLM fails, the raw text is searched and the response carries a warning.
+- **Flags and weights** are in `.env.example`; `similarity_score` stays the image cosine (the caption cosine for text).
+
+Eval (`eval/results/s8_compare.md`; 50 image queries, 20 text queries, 8 image + text queries):
+
+| Run | R@1 | R@5 | R@10 | MRR@10 | category acc. | p50 ms | p95 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| baseline (all flags off) = Stage 6 | 86% | 94% | 94% | 0.888 | 84%* | 360 | 394 |
+| + hybrid (**default**) | 86% | 94% | **100%** | 0.901 | 84%* | 358 | 406 |
+| + hybrid + boosts (query tagging on) | 84% | **98%** | 100% | **0.903** | – | 3911 | 6685 |
+| hybrid, category detected (SigLIP) | 74% | 80% | 84% | 0.772 | **84%** | 359 | 390 |
+| hybrid, category detected (Qwen) | 70% | 84% | 86% | 0.763 | 86% | 3674 | 6400 |
+| text queries | 85% | 95% | 100% | 0.883 | 80%† | 2142 | 5225 |
+| image only (refinement set) | 12% | 88% | 88% | 0.417 | – | 366 | 423 |
+| image + text refinement | **62%** | 88% | 100% | **0.771** | – | 1853 | 2112 |
+
+\* SigLIP detection gets 42/50 right (91% of the 46 it decided on). It asked on 4, and the true category was in
+the top 3 each time. Errors are necklace/pendant/bracelet confusions. † Text: the category was named in 16 of 20
+queries and was always right; the other 4 searched every category.
+
+Decisions and known limits:
+- Hybrid is on: R@10 goes 94% → 100%, and the three complete misses (q008, q014, q036) now reach the top 10.
+  Trade-off: a catalogue image can lose first place to a look-alike when its own caption ranks low
+  (BR-007_02; self-search 70/71 with hybrid, 71/71 without).
+- Query tagging stays off: +4 R@5 points (one query) for about 10× latency. Boosts stay on for text and refinements.
+- `colour_mismatch` queries are never pushed down: image queries never boost on colour or metal (all 7 keep their rank).
+- "Similar but in silver" moves silver items to the top and keeps the rest; `REFINE_METAL_HARD_FILTER=true`
+  shows only silver. Boosts rely on Stage 7 tags, e.g. NK-004 is tagged `black metal` only, so it doesn't get the silver boost.
+- Refinements with words outside the vocabulary (e.g. "with grooves") don't change the ranking.
+
+How to run:
+
+```bash
+cd backend && pytest -q tests/test_hybrid.py tests/test_query_parsing.py tests/test_search.py
+python eval/run_eval.py --backend siglip2_224 --name s8_baseline --set SEARCH_HYBRID=false --set SEARCH_BOOSTS=false
+python eval/run_eval.py --backend siglip2_224 --name s8_hybrid
+python eval/run_eval.py --backend siglip2_224 --name s8_hybrid_boosts --set SEARCH_QUERY_TAGGING=true
+python eval/run_eval.py --backend siglip2_224 --name s8_hybrid_detect --category detect
+python eval/run_eval.py --backend siglip2_224 --mode text --name s8_text
+python eval/run_eval.py --backend siglip2_224 --mode image_text --name s8_it_image_text
+python eval/run_eval.py --compare s8_baseline s8_hybrid s8_hybrid_boosts s8_hybrid_detect s8_text s8_it_image_text
+curl -s localhost:8080/search/text -H 'content-type: application/json' -d '{"text":"red ruby ring","debug":true}'
+```
+
+### Stage 9 — Colour-reduced and region features
+Added:
+- `POST /embed/batch` in `ai-service/app.py` (several images per request; same vectors as `/embed`).
+- `embed_client.embed_batch()`.
+- `to_grayscale`, `to_edge_map` and `make_tiles` in `preprocessing.py`, with their own versions; the main
+  `PREPROCESS_VERSION` is unchanged.
+- `scripts/build_feature_indexes.py --feature gray|edge|tiles [--grid N]` (resumable).
+- `backend/app/search/features.py`, the `FEATURE_*` flags, and `tests/test_features.py`.
+
+Stores (same `vector_id` as the image index):
+- gray / edge FAISS indexes: `data/faiss_index/features/<gray|edge>/<model>_<version>/`
+- tiles: `data/features/<model>_<version>/<category>/tiles_<g>x<g>.npy` + `_ids.npy` + a manifest per grid.
+  The grid is in the file name so 2×2 and 3×3 can sit side by side. Tiles are memory-mapped at startup and
+  only used to re-score the top 50.
+
+When any feature flag is on, the query's colour, gray and tile images go to SigLIP in one `/embed/batch`
+call. With every flag off the request is exactly the Stage 8 one (`/embed`), and a test checks that.
+`debug=true` shows `gray_rank`/`gray_score` and `rerank.{gray,edge,region}.score`.
+
+**Decision (`eval/results/stage9_decision.md`): only the 2×2 region rerank stays on.**
+
+| Config | R@1 | R@5 | MRR@10 | p95 ms |
+|---|---:|---:|---:|---:|
+| Stage 8 default | 86% | 94% | 0.901 | 607 |
+| + gray retrieval / rerank / both | 86 / 84 / 80% | 94% | 0.900 / 0.884 / 0.860 | ~900 |
+| **+ region 2×2 (now default)** | **90%** | **96%** | **0.931** | 1873 |
+| + region 3×3 | 84% | 96% | 0.895 | 3421 |
+
+- **Gray and edge are off.** colour_mismatch didn't improve (q014 got worse), each costs about 300 ms, and
+  edge maps hurt reflection queries.
+- **Region 2×2 is on** (weight 0.02, top 50). q008 goes from rank 8 to 1. It adds about 1.2 s per image search
+  on CPU; turn it off with `FEATURE_REGION_RERANK=false`.
+- **3×3 is off:** worse and slower.
+- **Patch tokens were skipped:** more than 1 s or about 575 GB of storage. Details are in the decision note.
+
+How to run:
+
+```bash
+python scripts/build_feature_indexes.py --feature gray
+python scripts/build_feature_indexes.py --feature tiles --grid 2
+cd backend && pytest -q tests/test_features.py && cd ..
+python eval/run_eval.py --backend siglip2_224 --name s9_base --set FEATURE_REGION_RERANK=false
+python eval/run_eval.py --backend siglip2_224 --name s9_gray_retrieval --set FEATURE_REGION_RERANK=false --set FEATURE_GRAY_RETRIEVAL=true
+python eval/run_eval.py --backend siglip2_224 --name s9_region_2x2
+python eval/run_eval.py --compare s9_base s9_gray_retrieval s9_region_2x2
+```
+
+### Stage 10 — Re-ranking, dedup, tuned weights, VLM judge
+Added: `backend/app/search/reranker.py`, `dedup.py`, `vlm_judge.py`, `config/reranker_weights_v1.json` and
+`_v2.json`, `scripts/make_eval_splits.py`, `eval/tune_weights.py`, a `split` column in `eval/queries.csv` and
+`eval/text_queries.csv`, `run_eval.py --split`, and `tests/test_reranker.py` / `tests/test_vlm_judge.py`.
+**Full results: `eval/results/stage10_final.md`.**
+
+- **Reranker:**
+  - Signals per candidate: image, caption, gray and region cosines, each mapped to 0–1 by clipping to a fixed
+    range (from catalogue statistics, never per query).
+  - final = weighted sum (missing signals dropped and weights re-normalized) + capped boosts, clipped to 0–1.
+  - Weights come from `config/reranker_weights_<version>.json`, and responses return
+    `reranker_weights_version`. `debug=true` shows each signal's raw value, 0–1 value and weight, plus labels
+    such as `{"design": "high", "stones": "match"}`.
+  - When the reranker is on, `similarity_score` is this 0–1 score; the response labels it as "not a probability".
+- **Dedup:** one result per product (its best image). Different products with near-identical images (image cosine
+  ≥ 0.98) are both kept, and the lower one gets `possible_duplicate_of` in the debug block.
+- **Tuning:** the 36 tune queries only (split seed 42, stratified). The holdout (14 image + 6 text) was run once.
+- **Outcome:**
+  - The tuned image weights (caption 0.8, region 0.2, image 0) overfit: holdout R@1 86% vs 93% for Stage 9.
+    So image search keeps the Stage 9 order (`RERANKER_MODES=text`).
+  - For text, holdout R@1 went 83% → 100%.
+  - The Stage 6 baseline is already at R@5 100% on this holdout, so it can't be beaten there. On all 50 queries
+    the default beats it: R@5 96% vs 94%.
+- **VLM judge (`FEATURE_VLM_JUDGE`, off):**
+  - Qwen checks the top 5 for "same design", with results cached.
+  - Holdout R@1 93% → 100%; all 50: 90% → 94%. No query got worse.
+  - Cost: 5 Qwen calls and about +4.5 s p95 per search, so it stays off.
+
+```bash
+python scripts/make_eval_splits.py
+python eval/tune_weights.py --mode image --new-version v2      # tune split only
+python eval/run_eval.py --backend siglip2_224 --split holdout --name s10_holdout
+python eval/run_eval.py --backend siglip2_224 --split holdout --name s10_judge --set FEATURE_VLM_JUDGE=true
+cd backend && pytest -q tests/test_reranker.py tests/test_vlm_judge.py
+```
