@@ -1,0 +1,72 @@
+image_id,product_id,project_id,category,subcategory,image_path
+RG-001_01,RG-001,demo,rings,band,data/catalogue/rings/RG-001_01.jpg
+RG-002_01,RG-002,demo,rings,fashion,data/catalogue/rings/RG-002_01.jpg
+RG-003_01,RG-003,demo,rings,band,data/catalogue/rings/RG-003_01.jpg
+RG-003_02,RG-003,demo,rings,band,data/catalogue/rings/RG-003_02.jpg
+RG-004_01,RG-004,demo,rings,cocktail,data/catalogue/rings/RG-004_01.jpg
+RG-005_01,RG-005,demo,rings,solitaire,data/catalogue/rings/RG-005_01.jpg
+RG-006_01,RG-006,demo,rings,fashion,data/catalogue/rings/RG-006_01.jpg
+RG-007_01,RG-007,demo,rings,cocktail,data/catalogue/rings/RG-007_01.jpg
+RG-008_01,RG-008,demo,rings,bridal set,data/catalogue/rings/RG-008_01.jpg
+RG-009_01,RG-009,demo,rings,band,data/catalogue/rings/RG-009_01.jpg
+RG-010_01,RG-010,demo,rings,band,data/catalogue/rings/RG-010_01.jpg
+RG-011_01,RG-011,demo,rings,band,data/catalogue/rings/RG-011_01.jpg
+RG-012_01,RG-012,demo,rings,fashion,data/catalogue/rings/RG-012_01.jpg
+RG-013_01,RG-013,demo,rings,fashion,data/catalogue/rings/RG-013_01.jpg
+RG-014_01,RG-014,demo,rings,cocktail,data/catalogue/rings/RG-014_01.jpg
+ER-001_01,ER-001,demo,earrings,drops,data/catalogue/earrings/ER-001_01.jpg
+ER-002_01,ER-002,demo,earrings,drops,data/catalogue/earrings/ER-002_01.jpg
+ER-003_01,ER-003,demo,earrings,hooks,data/catalogue/earrings/ER-003_01.jpg
+ER-004_01,ER-004,demo,earrings,hooks,data/catalogue/earrings/ER-004_01.jpg
+ER-005_01,ER-005,demo,earrings,drops,data/catalogue/earrings/ER-005_01.jpg
+ER-006_01,ER-006,demo,earrings,hooks,data/catalogue/earrings/ER-006_01.jpg
+ER-007_01,ER-007,demo,earrings,drops,data/catalogue/earrings/ER-007_01.jpg
+ER-008_01,ER-008,demo,earrings,hooks,data/catalogue/earrings/ER-008_01.jpg
+ER-008_02,ER-008,demo,earrings,hooks,data/catalogue/earrings/ER-008_02.jpg
+ER-009_01,ER-009,demo,earrings,chandelier,data/catalogue/earrings/ER-009_01.jpg
+ER-010_01,ER-010,demo,earrings,drops,data/catalogue/earrings/ER-010_01.jpg
+ER-011_01,ER-011,demo,earrings,drops,data/catalogue/earrings/ER-011_01.jpg
+ER-012_01,ER-012,demo,earrings,drops,data/catalogue/earrings/ER-012_01.jpg
+ER-013_01,ER-013,demo,earrings,drops,data/catalogue/earrings/ER-013_01.jpg
+ER-014_01,ER-014,demo,earrings,drops,data/catalogue/earrings/ER-014_01.jpg
+NK-001_01,NK-001,demo,necklaces,beaded,data/catalogue/necklaces/NK-001_01.jpg
+NK-002_01,NK-002,demo,necklaces,layered,data/catalogue/necklaces/NK-002_01.jpg
+NK-003_01,NK-003,demo,necklaces,bib,data/catalogue/necklaces/NK-003_01.jpg
+NK-004_01,NK-004,demo,necklaces,pendant chain,data/catalogue/necklaces/NK-004_01.jpg
+NK-005_01,NK-005,demo,necklaces,chain,data/catalogue/necklaces/NK-005_01.jpg
+NK-006_01,NK-006,demo,necklaces,bib,data/catalogue/necklaces/NK-006_01.jpg
+NK-006_02,NK-006,demo,necklaces,bib,data/catalogue/necklaces/NK-006_02.jpg
+NK-007_01,NK-007,demo,necklaces,layered,data/catalogue/necklaces/NK-007_01.jpg
+NK-008_01,NK-008,demo,necklaces,chain,data/catalogue/necklaces/NK-008_01.jpg
+NK-009_01,NK-009,demo,necklaces,layered,data/catalogue/necklaces/NK-009_01.jpg
+NK-010_01,NK-010,demo,necklaces,pendant chain,data/catalogue/necklaces/NK-010_01.jpg
+NK-011_01,NK-011,demo,necklaces,beaded,data/catalogue/necklaces/NK-011_01.jpg
+NK-012_01,NK-012,demo,necklaces,beaded,data/catalogue/necklaces/NK-012_01.jpg
+PD-001_01,PD-001,demo,pendants,cabochon,data/catalogue/pendants/PD-001_01.jpg
+PD-002_01,PD-002,demo,pendants,framed stone,data/catalogue/pendants/PD-002_01.jpg
+PD-003_01,PD-003,demo,pendants,novelty,data/catalogue/pendants/PD-003_01.jpg
+PD-004_01,PD-004,demo,pendants,art glass,data/catalogue/pendants/PD-004_01.jpg
+PD-005_01,PD-005,demo,pendants,novelty,data/catalogue/pendants/PD-005_01.jpg
+PD-005_02,PD-005,demo,pendants,novelty,data/catalogue/pendants/PD-005_02.jpg
+PD-006_01,PD-006,demo,pendants,minimalist,data/catalogue/pendants/PD-006_01.jpg
+PD-007_01,PD-007,demo,pendants,minimalist,data/catalogue/pendants/PD-007_01.jpg
+PD-008_01,PD-008,demo,pendants,art glass,data/catalogue/pendants/PD-008_01.jpg
+PD-009_01,PD-009,demo,pendants,art glass,data/catalogue/pendants/PD-009_01.jpg
+PD-010_01,PD-010,demo,pendants,ethnic,data/catalogue/pendants/PD-010_01.jpg
+PD-011_01,PD-011,demo,pendants,minimalist,data/catalogue/pendants/PD-011_01.jpg
+PD-012_01,PD-012,demo,pendants,religious,data/catalogue/pendants/PD-012_01.jpg
+BR-001_01,BR-001,demo,bracelets,bangle,data/catalogue/bracelets/BR-001_01.jpg
+BR-002_01,BR-002,demo,bracelets,cord,data/catalogue/bracelets/BR-002_01.jpg
+BR-003_01,BR-003,demo,bracelets,chain,data/catalogue/bracelets/BR-003_01.jpg
+BR-004_01,BR-004,demo,bracelets,mangalsutra,data/catalogue/bracelets/BR-004_01.jpg
+BR-005_01,BR-005,demo,bracelets,cord,data/catalogue/bracelets/BR-005_01.jpg
+BR-006_01,BR-006,demo,bracelets,chain,data/catalogue/bracelets/BR-006_01.jpg
+BR-007_01,BR-007,demo,bracelets,cuff,data/catalogue/bracelets/BR-007_01.jpg
+BR-007_02,BR-007,demo,bracelets,cuff,data/catalogue/bracelets/BR-007_02.jpg
+BR-008_01,BR-008,demo,bracelets,stretch,data/catalogue/bracelets/BR-008_01.jpg
+BR-008_02,BR-008,demo,bracelets,stretch,data/catalogue/bracelets/BR-008_02.jpg
+BR-009_01,BR-009,demo,bracelets,wrap,data/catalogue/bracelets/BR-009_01.jpg
+BR-010_01,BR-010,demo,bracelets,bangle,data/catalogue/bracelets/BR-010_01.jpg
+BR-011_01,BR-011,demo,bracelets,slider,data/catalogue/bracelets/BR-011_01.jpg
+BR-012_01,BR-012,demo,bracelets,chain,data/catalogue/bracelets/BR-012_01.jpg
+BR-013_01,BR-013,demo,bracelets,chain,data/catalogue/bracelets/BR-013_01.jpg

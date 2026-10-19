@@ -1,0 +1,54 @@
+services:
+  mongodb:
+    image: mongo:8.2   # 8.0 refuses to start on Linux kernel >= 6.19 (SERVER-121912)
+    container_name: jewellery-mongodb
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  siglip2-api:
+    build: ./ai-service
+    image: siglip2-api
+    container_name: siglip2-api
+    ports:
+      - "${EMBED_PORT:-8000}:8000"
+    environment:
+      MODEL_PATH: /models
+    volumes:
+      - ${SIGLIP_MODEL_DIR:?set SIGLIP_MODEL_DIR in .env}:/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+
+  # EMBED_BACKEND=siglip2_384: same image, 384 px weights. Started only with --profile siglip384.
+  siglip2-api-384:
+    image: siglip2-api
+    container_name: siglip2-api-384
+    profiles: ["siglip384"]
+    ports:
+      - "${EMBED_384_PORT:-8003}:8000"
+    environment:
+      MODEL_PATH: /models
+    volumes:
+      - ${SIGLIP_384_MODEL_DIR:?set SIGLIP_384_MODEL_DIR in .env}:/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

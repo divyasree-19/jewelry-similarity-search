@@ -1,0 +1,11 @@
+# Allowed values for the "category" column (one per line, lowercase).
+# Each category gets its own FAISS index, so add or remove lines to match the catalogue.
+rings
+earrings
+necklaces
+pendants
+bangles
+bracelets
+chains
+nose_pins
+anklets

@@ -1,0 +1,66 @@
+product_id,project_id,category,subcategory,name,metal,gemstones,stone_colours,motifs,style,catalogue_sources
+RG-001,demo,rings,band,Men's two-tone band with four diamond bars,yellow gold;black rhodium,diamond,white,bars;stripes,men's;modern,train/Ring/ring_183_jpg.rf.b1600970ad7b806aa735e1cb8d4802b7.jpg
+RG-002,demo,rings,fashion,Gold knot ring with diamond heart,yellow gold;white gold,diamond,white,heart;knot,romantic,train/Ring/ring_138_jpg.rf.af375ea65c2d81fb5e459868771df395.jpg
+RG-003,demo,rings,band,Plain gold band with milgrain edges,yellow gold,,,milgrain;grooves,classic,train/Ring/ring_164_jpg.rf.305743ffeb69c92e236b5b946c990b97.jpg;train/Ring/ring_164_jpg.rf.000796b55b9d6b466017f6d17c698b2f.jpg
+RG-004,demo,rings,cocktail,Gold swirl dome ring with diamond triangle,yellow gold,diamond,white,swirl;triangle;openwork,statement,train/Ring/ring_111_jpg.rf.313f21c206d5d2c98e13332380d00de5.jpg
+RG-005,demo,rings,solitaire,Bypass solitaire ring with pave shoulders,yellow gold;white gold,diamond,white,bypass;twist,engagement,train/Ring/ring_091_jpg.rf.700a8cbe34dfa17c030f96b946c25081.jpg
+RG-006,demo,rings,fashion,Gold ring with black enamel parallelogram top,yellow gold,enamel,black,geometric;parallelogram,modern,train/Ring/ring_163_jpg.rf.bde7fdeba83692134733866a72f96e2c.jpg
+RG-007,demo,rings,cocktail,Navaratna nine-stone flower cluster ring,yellow gold,ruby;sapphire;emerald;pearl;diamond;topaz;coral,multicolour,flower;cluster,traditional,train/Ring/ring_105_jpg.rf.0cdf26ee5d7d0c42fa5c1fae51f8f794.jpg
+RG-008,demo,rings,bridal set,Halo bridal ring set with pink centre stone,white gold,pink sapphire;diamond,pink;white,halo;pave,bridal,train/Ring/Screenshot_20181116-204341_1542449441847_png.rf.c6ec5a05db0fc8044130fa16a3c13c72.jpg
+RG-009,demo,rings,band,Men's band with rose gold plate and single diamond,white gold;rose gold,diamond,white,plate;bevel,men's;modern,train/Ring/ring_097_jpg.rf.1ec3c17fa583df673c4dfa71ca16b1bd.jpg
+RG-010,demo,rings,band,Black rhodium pave dome band,black rhodium,diamond,white,pave;dome,modern,train/Ring/ring_185_jpg.rf.000ee0293ff7993e73a70da863a1db3c.jpg
+RG-011,demo,rings,band,Plain gold band with double grooves,yellow gold,,,grooves,classic,train/Ring/ring_080_jpg.rf.14976e73936b0c42817b24f4cfce8aaa.jpg
+RG-012,demo,rings,fashion,Gold knot ring with diamond-set heart loop,yellow gold;white gold,diamond,white,heart;knot,romantic,train/Ring/ring_074_jpg.rf.3f96db5034e7840546f99dd897532907.jpg
+RG-013,demo,rings,fashion,White gold twist ring with diamond line,white gold,diamond,white,twist;crossover,minimalist,train/Ring/ring_112_jpg.rf.23bccb561ad5c1c925aa76d4f37d4d61.jpg
+RG-014,demo,rings,cocktail,Round diamond cluster cocktail ring,white gold,diamond,white,concentric circles;pave,statement,train/Ring/ring_156_jpg.rf.1ea0a275a7bbf68b78072ce18863646c.jpg
+ER-001,demo,earrings,drops,Rose gold filigree crescent drops with amethyst and pearl,rose gold,amethyst;pearl;diamond,purple;white,filigree;crescent;scroll,vintage,train/Earrings/earring_466_jpg.rf.6a5530db40c50ce4d7700df05aa011fb.jpg
+ER-002,demo,earrings,drops,Lattice pod drops with disc cluster top,yellow gold;white gold,,,lattice;discs;pod,contemporary,train/Earrings/earring_433_jpg.rf.ed5b0cad3e493366c9a8c5e862a73832.jpg
+ER-003,demo,earrings,hooks,Hammered gold crescent disc hook earrings,yellow gold,,,disc;hammered;crescent,boho,train/Earrings/earring_349_jpg.rf.5430cb2c98bec152bf81bc481b76c10e.jpg
+ER-004,demo,earrings,hooks,Gold kite drops with quatrefoil cut-out,yellow gold,diamond,white,quatrefoil;cut-out;kite,gothic,train/Earrings/earring_11_jpg.rf.14f900dab8d780d88c6d9104d7c5add5.jpg
+ER-005,demo,earrings,drops,Gold-framed checkerboard-cut green stone drops,yellow gold,green onyx;diamond,green;white,cushion;checkerboard,classic,train/Earrings/earring_34_jpg.rf.b8a4f5a2f41ad5108d07327226cab165.jpg
+ER-006,demo,earrings,hooks,Rectangular woven lattice hook earrings,yellow gold,,,rectangle;celtic weave;cut-out,contemporary,train/Earrings/earring_331_jpg.rf.a2e491e26e5d01cc18772ebc23a057d4.jpg
+ER-007,demo,earrings,drops,Two-tone flower studs with chain and pear drops,yellow gold;white gold,,,flower;chain;pear,contemporary,train/Earrings/earring_435_jpg.rf.af24e241ea3e554f584336737c258c4b.jpg
+ER-008,demo,earrings,hooks,Gold cup drop hook earrings with garnet,yellow gold,garnet,red,cup;round,classic,train/Earrings/earring_22_jpg.rf.402b7b81eb61aeb1dcb3047954674ba5.jpg;train/Earrings/earring_22_jpg.rf.922a0c6ee6e742cb5421a95558dc93ed.jpg
+ER-009,demo,earrings,chandelier,Pear cluster chandelier earrings with diamonds,white gold,diamond,white,pear;chandelier,statement,train/Earrings/earring_140_jpg.rf.4272fb176654867d926755b62fb75048.jpg
+ER-010,demo,earrings,drops,Open teardrop earrings with diamond rail,yellow gold,diamond,white,teardrop;loop,modern,train/Earrings/earring_129_jpg.rf.8292e4ae5ffbe2401051a663c45ba743.jpg
+ER-011,demo,earrings,drops,Smoky quartz hexagon and pear drops,yellow gold,smoky quartz,brown,hexagon;pear,modern,train/Earrings/images-71-_jpeg.rf.9c9158df77c5197e42513665fb2b2a51.jpg
+ER-012,demo,earrings,drops,Two-tone square floral filigree drops,yellow gold;white gold,,,square;floral filigree;cut-out,contemporary,train/Earrings/earring_373_jpg.rf.0c189467afc6b72498d4da4f667016d6.jpg
+ER-013,demo,earrings,drops,Gold leaf drops with pearl and garnet,yellow gold,pearl;garnet,white;red,leaf;bell,traditional,train/Earrings/earring_23_jpg.rf.1661d5e0b8814c7a5a86b7c5d59cd4ec.jpg
+ER-014,demo,earrings,drops,Interlocking circles drops with diamonds,yellow gold;white gold,diamond,white,circles;interlocking,contemporary,train/Earrings/earring_83_jpg.rf.0b35f58e83ee46d019a8c243215cb973.jpg
+NK-001,demo,necklaces,beaded,Graduated tiger's eye bead necklace,,tiger's eye,brown;gold,beads;graduated,casual,train/Necklace/IMG_2418_d550a604_JPG.rf.e203eb437fe88d6eec409f782842f41e.jpg
+NK-002,demo,necklaces,layered,Silver multi-strand chain necklace with shell discs,silver,shell,white,discs;multi-strand,boho,train/Necklace/IMG_0445-1-_af8d2be9_JPG.rf.d7d40fd8342f3a3aa2114e73aae20eb8.jpg
+NK-003,demo,necklaces,bib,Bronze petal bib necklace,bronze-tone,,,petals;bib,statement,train/Necklace/IMG_2236_87c45f0e_JPG.rf.d75a409cc2c0073da87f1b2648f2db72.jpg
+NK-004,demo,necklaces,pendant chain,Silver chain with black cross pendant,silver;black metal,,,cross,religious,train/Necklace/IMG_1497_29f8159d_JPG.rf.6940a95a1333bd46530a6b4a6dc22436.jpg
+NK-005,demo,necklaces,chain,Gold herringbone chain necklace,yellow gold,,,herringbone,classic,train/Necklace/IMG_0593_9dbd2a91_jpg.rf.37f7cad04214be737e10a352606c552c.jpg
+NK-006,demo,necklaces,bib,Yellow bead bib necklace,,resin beads,yellow,beads;bib,statement,train/Necklace/IMG_0230_f447860f_JPG.rf.c9f0606a6ed576552288f762968aade1.jpg;train/Necklace/IMG_0230_f447860f_JPG.rf.52de240804626dd8630e7c444f27b597.jpg
+NK-007,demo,necklaces,layered,Layered silver chains with crystal clusters,silver,crystal,clear,layered;cluster,statement,train/Necklace/IMG_3543_1d658345_JPG.rf.85a9d7e4507ce236a76f62365ad59d17.jpg
+NK-008,demo,necklaces,chain,Chunky gold double-link chain necklace,gold-tone,,,double link,statement,train/Necklace/IMG_2145_e3c9b311_JPG.rf.4a7966a77f64bbb7192f372b7570bebd.jpg
+NK-009,demo,necklaces,layered,Double-strand gold bead chain with drops,yellow gold,,,bead chain;drops;layered,delicate,train/Necklace/necklace_193_jpg.rf.1a5eef766fc8ff17aa7e18e5c3e4930d.jpg
+NK-010,demo,necklaces,pendant chain,Silver chain with silver cross pendant,silver,,,cross,religious,train/Necklace/IMG_0470_ff45ff87_jpg.rf.624e5c73175b9d1f2223a098c810ee95.jpg
+NK-011,demo,necklaces,beaded,Grey stone nugget and bead necklace,silver,agate,grey,nuggets;beads,boho,train/Necklace/necklace_20241125_122545_808181f9_jpg.rf.9aa00ca98ba422afbc8c1a2b0c19cbe4.jpg
+NK-012,demo,necklaces,beaded,Coral and turquoise bead necklace with inlaid pendant,brass,coral;turquoise;amber,red;blue;orange,beads;inlay,ethnic,train/Necklace/IMG_2380_34440aaf_JPG.rf.d3de1c74fbfb41e088868fd5c32c4ad3.jpg
+PD-001,demo,pendants,cabochon,Blue agate cabochon pendant on beaded cord,silver,agate,blue,cabochon;freeform,boho,train/Pendant/IMG_3508_c0ed2d28_JPG.rf.d3230acda91e69661a3926286fd0631c.jpg
+PD-002,demo,pendants,framed stone,Ornate silver frame pendant with blue square stone,silver,blue glass,blue,frame;square;scroll,vintage,train/Pendant/IMG_0845_2d416634_JPG.rf.c484a3d7fc401ea1166cadf90ff6f1ff.jpg
+PD-003,demo,pendants,novelty,Cactus pendant with green stones,gold-tone,green stones,green,cactus,novelty,train/Pendant/IMG_0467-1-_c9749438_JPG.rf.cd5cea1b9d79c553937c441d4eec2703.jpg
+PD-004,demo,pendants,art glass,Glass heart pendant with lampwork flower,glass,,,heart;flower,art glass,train/Pendant/IMG_2907_4bcb0ae7_jpg.rf.2ad932970b114e79af7a9dc62e111b90.jpg
+PD-005,demo,pendants,novelty,Gold leopard pendant on omega chain,yellow gold,enamel,black,leopard;animal,novelty,train/Pendant/other_20241125_122403_8383c799_jpg.rf.64fb10e6fa28dcbc72b70b69151258cf.jpg;train/Pendant/other_20241125_122403_8383c799_jpg.rf.495ba86b2aef16bfbb2887e69f4ceefd.jpg
+PD-006,demo,pendants,minimalist,Ribbed shell pendant on black cord,bronze-tone,,,shell;ribs,minimalist,train/Pendant/IMG_1567_31c00736_JPG.rf.0d32bd4c173b26c365ceadb801ccd790.jpg
+PD-007,demo,pendants,minimalist,Brass tube pendant with heart cut-out,brass,,,tube;heart,minimalist,train/Pendant/necklace_124_jpg.rf.13eab69c499f2bbdfb0fc9ca51464d88.jpg
+PD-008,demo,pendants,art glass,Glass leaf pendant with gold swirl,glass,,,leaf;swirl,art glass,train/Pendant/IMG_2870_451f1def_jpg.rf.9391dcf1cc9d9b9d92a374961f270a54.jpg
+PD-009,demo,pendants,art glass,Pink swirl glass heart pendant,glass,,,heart;swirl,art glass,train/Pendant/IMG_2911_4bf24190_jpg.rf.5aab4c3c4979b6797fc9c1774e71c493.jpg
+PD-010,demo,pendants,ethnic,"Inlay pendant with amber, turquoise and coral",brass,amber;turquoise;coral,orange;blue;red,inlay;oval,ethnic,train/Pendant/IMG_2371_c0acc0f4_JPG.rf.3cd0f97fef1745c04f3251be7561f08f.jpg
+PD-011,demo,pendants,minimalist,Amber teardrop pendant on black cord,,amber,brown,teardrop,minimalist,train/Pendant/IMG_2877_c118c42c_jpg.rf.47b515dff46dc03198a49309ac4d3539.jpg
+PD-012,demo,pendants,religious,Silver cross pendant with green dichroic glass,silver,dichroic glass,green;yellow,cross,religious,train/Pendant/IMG_1500_0daa4afd_JPG.rf.46406f459af5b2b2a015dc29a3dc79d1.jpg
+BR-001,demo,bracelets,bangle,Rose gold wave bangle with diamond pave,rose gold,diamond,white,wave;open,modern,train/Bracelet/bracelet_251_jpg.rf.b220239a242397abd1685b21fe6a65cf.jpg
+BR-002,demo,bracelets,cord,Black cord bracelet with evil-eye flower charm,yellow gold;cord,evil eye;diamond,blue;black,evil eye;flower,protective,train/Bracelet/bracelet_079_jpg.rf.88f3f8c8f913ac624311c098f92b95c6.jpg
+BR-003,demo,bracelets,chain,Gold chain bracelet with ruby bird charms,yellow gold,ruby,red,bird,delicate,train/Bracelet/bracelet_016_jpg.rf.dda53597319709f131ab58793ea23dea.jpg
+BR-004,demo,bracelets,mangalsutra,Black bead mangalsutra bracelet with gold disc,yellow gold,black beads,black,beads;disc,traditional,train/Bracelet/bracelet_144_jpg.rf.76dc4e2e21e7daf191103e0a1d785fa2.jpg
+BR-005,demo,bracelets,cord,Black cord bracelet with evil-eye and elephant charm,white gold;cord,evil eye;diamond,blue;black,evil eye;elephant,protective,train/Bracelet/bracelet_023_jpg.rf.646567e42a4344d47ae72767f25c4730.jpg
+BR-006,demo,bracelets,chain,Gold chain bracelet with evil-eye charm,yellow gold,evil eye;diamond,blue;white,evil eye,protective,train/Bracelet/bracelet_254_jpg.rf.90d2a24780e2b81ada8f62f54ed963de.jpg
+BR-007,demo,bracelets,cuff,Wide crystal mesh cuff,silver,crystal,clear,mesh,statement,train/Bracelet/IMG_0825_1c89fb88_JPG.rf.49e4e02a3a63ab1e9cd29b06407df922.jpg;train/Bracelet/IMG_0825_1c89fb88_JPG.rf.823dc597fa792004c45f44420f3c8a55.jpg
+BR-008,demo,bracelets,stretch,Stretch bracelet with black and gold tiles,steel,,,tiles,men's,train/Bracelet/IMG_1304_0ee02e82_JPG.rf.5c4517cdee33f34889523d5cfdad0ba3.jpg;train/Bracelet/IMG_1304_0ee02e82_JPG.rf.5a839419a73d8e96a33836d2cd858de5.jpg
+BR-009,demo,bracelets,wrap,Turquoise bead leather wrap bracelet,leather,turquoise beads,blue,beads;wrap,boho,train/Bracelet/IMG_1406_58d593d9_JPG.rf.2647cd73d7b9fef27afe6b9989d9d964.jpg
+BR-010,demo,bracelets,bangle,Gold wire bangle with interlocking loops,yellow gold,,,loops,minimalist,train/Bracelet/bracelet_061_jpg.rf.5b20c3def68aeffdc39e3ccb6d9a9041.jpg
+BR-011,demo,bracelets,slider,Gold bolo slider bracelet with three diamond discs,yellow gold,diamond,white,discs,adjustable,train/Bracelet/bracelet_238_jpg.rf.4f1b12aa7baaff4cde39582ee3c583ff.jpg
+BR-012,demo,bracelets,chain,Gold chain bracelet with diamond flower and wave,yellow gold,diamond,white,flower;wave,delicate,train/Bracelet/bracelet_018_jpg.rf.034a8dd70c67cb59ccdcc97144ff1f39.jpg
+BR-013,demo,bracelets,chain,Two-tone bead chain bracelet,yellow gold;white gold,,,beads,classic,train/Bracelet/bracelet_240_jpg.rf.58eb689226a46e84ef55a38b1b9d90ef.jpg

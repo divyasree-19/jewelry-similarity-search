@@ -1,0 +1,3 @@
+# Optional: background removal for PREPROCESS_REMOVE_BACKGROUND (off by default).
+# rembg 2.0.85 requires pillow<13, so installing this downgrades Pillow from requirements.txt to 12.x.
+rembg[cpu]==2.0.85
