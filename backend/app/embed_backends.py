@@ -20,17 +20,18 @@ class EmbedBackend:
     model_name: str
     version: str
     description: str
+    dimension: int  # vector length; index manifests must record the same
 
 
 BACKENDS = {
     "siglip2_224": EmbedBackend(
-        "siglip2_224", "google/siglip2-base-patch16-224", "siglip2-base-v1", "SigLIP 2 Base, 224 px input"
+        "siglip2_224", "google/siglip2-base-patch16-224", "siglip2-base-v1", "SigLIP 2 Base, 224 px input", 768
     ),
     "siglip2_384": EmbedBackend(
-        "siglip2_384", "google/siglip2-base-patch16-384", "siglip2-base-384-v1", "SigLIP 2 Base, 384 px input"
+        "siglip2_384", "google/siglip2-base-patch16-384", "siglip2-base-384-v1", "SigLIP 2 Base, 384 px input", 768
     ),
     "vertex": EmbedBackend(
-        "vertex", "multimodalembedding@001", "vertex-mm-1408-v1", "Vertex AI multimodal embeddings, 1408-dim"
+        "vertex", "multimodalembedding@001", "vertex-mm-1408-v1", "Vertex AI multimodal embeddings, 1408-dim", 1408
     ),
 }
 

@@ -25,6 +25,10 @@ class LLMError(Exception):
     """The LLM is unreachable or did not return a usable JSON object after a retry."""
 
 
+class LLMUnavailableError(LLMError):
+    """The LLM could not be reached, timed out or answered with an HTTP error (as opposed to an unusable reply)."""
+
+
 @dataclass
 class ParsedQuery:
     tags: QueryTags
@@ -129,11 +133,11 @@ class LLMClient:
                 body.pop("response_format")
                 response = await self._client.post("/chat/completions", json=body)
         except httpx.TimeoutException as exc:
-            raise LLMError(f"LLM timed out at {self.base_url}") from exc
+            raise LLMUnavailableError(f"LLM timed out at {self.base_url}") from exc
         except httpx.RequestError as exc:
-            raise LLMError(f"Cannot reach LLM at {self.base_url}: {exc}") from exc
+            raise LLMUnavailableError(f"Cannot reach LLM at {self.base_url}: {exc}") from exc
         if response.status_code >= 400:
-            raise LLMError(f"LLM returned HTTP {response.status_code}: {response.text[:300]}")
+            raise LLMUnavailableError(f"LLM returned HTTP {response.status_code}: {response.text[:300]}")
         try:
             return response.json()["choices"][0]["message"]["content"] or ""
         except (ValueError, KeyError, IndexError, TypeError) as exc:

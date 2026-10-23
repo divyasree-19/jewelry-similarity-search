@@ -7,6 +7,18 @@ from app.search.image_search import search_by_image
 
 router = APIRouter()
 
+# Documented error responses (body: {"detail": "<readable message>"}); every error has this shape
+ERRORS = {
+    400: {"description": "Invalid request: missing or malformed field, unknown category, bad top_k, empty, "
+                         "corrupt or too-small image"},
+    404: {"description": "Nothing is indexed for the category (or at all)"},
+    503: {"description": "A dependency is unavailable: embedding service (SigLIP), catalogue database (MongoDB), "
+                         "query parser (Qwen, text search only), or the category's index does not match the "
+                         "current settings"},
+}
+IMAGE_ERRORS = {**ERRORS, 413: {"description": "Image larger than MAX_UPLOAD_MB"},
+                415: {"description": "Not a JPEG, PNG or WebP image (declared type or file content)"}}
+
 
 def clean_category(app, category: str | None) -> str | None:
     category = (category or "").strip().lower() or None
@@ -21,7 +33,7 @@ def check_top_k(app, top_k: int) -> None:
         raise HTTPException(400, f"top_k must be between 1 and {limit}")
 
 
-@router.post("/search/image")
+@router.post("/search/image", responses=IMAGE_ERRORS)
 async def search_image(
     request: Request,
     file: UploadFile = File(..., description="JPEG, PNG or WebP photo"),

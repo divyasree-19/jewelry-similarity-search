@@ -5,6 +5,7 @@ service is replaced by a deterministic fake that turns the preprocessed image in
 test needs no model. Skipped when MongoDB is not reachable.
 """
 
+import os
 import uuid
 from io import BytesIO
 
@@ -23,7 +24,7 @@ from app.preprocessing import PreprocessOptions, encode, preprocess
 from app.tagging.schema import QueryTags
 from app.vector_index import CategoryIndexes
 
-MONGO_URI = "mongodb://localhost:27017"
+MONGO_URI = os.environ.get("TEST_MONGO_URI", "mongodb://localhost:27017")  # mongodb://mongodb:27017 in compose
 
 
 def fake_vector(png_bytes: bytes) -> list[float]:
@@ -137,7 +138,7 @@ def catalogue(tmp_path, monkeypatch):
         "MONGO_URI": MONGO_URI, "MONGO_DB": db_name, "EMBED_BACKEND": "siglip2_224",
         "FAISS_INDEX_DIR": str(tmp_path / "faiss"), "CATALOGUE_DIR": str(catalogue_dir),
         "CATEGORIES_FILE": str(categories), "QUERY_IMAGE_DIR": str(tmp_path / "uploads"), "MAX_UPLOAD_MB": "0.5",
-        "FEATURES_DIR": str(tmp_path / "features"),
+        "FEATURES_DIR": str(tmp_path / "features"), "EMBED_DIMENSION": "192",  # fake_vector length
         "FEATURE_REGION_RERANK": "false",  # Stage 8 path; tests/test_features.py switches features on
         "SEARCH_RERANKER": "false",  # tests/test_reranker.py switches it on
     }.items():
@@ -257,12 +258,12 @@ def test_png_and_webp_uploads_are_accepted(client, catalogue):
         assert response.status_code == 200 and response.json()["results"][0]["product_id"] == "RG-2"
 
 
-def test_embedding_service_down_is_502(client, catalogue):
+def test_embedding_service_down_is_503(client, catalogue):
     files, _ = catalogue
     main.app.state.embed_client = FakeEmbedClient(fail=True)
     response = search(client, files["RG-2_a"])
-    assert response.status_code == 502
-    assert "Embedding service is unavailable" in response.json()["detail"]
+    assert response.status_code == 503
+    assert "Embedding service unavailable" in response.json()["detail"]
 
 
 def test_cors_allows_only_the_frontend_origin(client):

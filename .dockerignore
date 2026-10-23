@@ -1,0 +1,18 @@
+# Build context of backend/Dockerfile (the project root). Data, models and secrets stay out of the image.
+.git
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/node_modules
+.env
+.env.*
+data/*
+!data/categories.txt
+!data/catalogue.csv
+!data/products.csv
+eval/results
+eval/preprocess_samples
+frontend
+ai-service
+docs

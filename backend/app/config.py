@@ -14,7 +14,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         # .env.backend wins over .env when both exist
-        env_file=(PROJECT_ROOT / ".env", PROJECT_ROOT / ".env.backend"), env_file_encoding="utf-8", extra="ignore"
+        env_file=(PROJECT_ROOT / ".env", PROJECT_ROOT / ".env.backend"), env_file_encoding="utf-8", extra="ignore",
+        env_ignore_empty=True,  # "KEY=" in .env means "use the default"
     )
 
     # Which embedding model to use; each has its own index directory (see app/embed_backends.py).
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
     vertex_project: str | None = None
     vertex_location: str = "us-central1"
     embed_timeout_seconds: float = 30.0
+    embed_dimension: int | None = None  # override the backend's vector length (tests with fake embeddings only)
 
     mongo_uri: str = "mongodb://localhost:27017"
     mongo_db: str = "jewellery_search"
@@ -105,6 +107,8 @@ class Settings(BaseSettings):
     llm_service_url: str | None = None
     llm_model_name: str | None = None
     llm_api_key: str | None = None
+    # A search waits at most this long for query parsing; slower or unreachable means Qwen is unavailable
+    llm_query_timeout_seconds: float = 20.0
 
     # Stage 7 tagging VLM: any OpenAI-compatible chat API (base URL ending in /v1)
     vlm_service_url: str = "http://localhost:8002/v1"
@@ -146,6 +150,10 @@ class Settings(BaseSettings):
     @property
     def embed_version(self) -> str:
         return self.backend.version
+
+    @property
+    def expected_dimension(self) -> int:
+        return self.embed_dimension or self.backend.dimension
 
 
 @lru_cache

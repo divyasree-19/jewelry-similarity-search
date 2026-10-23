@@ -12,12 +12,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from pymongo import ASCENDING, MongoClient
+from pymongo import MongoClient
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "backend"))
 
 from app.config import get_settings  # noqa: E402
+from app.db import ensure_indexes  # noqa: E402
 
 LIST_FIELDS = ["metal", "gemstones", "stone_colours", "motifs", "style"]
 
@@ -84,12 +85,7 @@ def write_metadata(db, products: list[dict], images: list[dict]) -> None:
         ).deleted_count
         print(f"{collection}: {len(docs)} upserted, {removed} stale removed")
 
-    db.products.create_index([("category", ASCENDING)])
-    db.images.create_index([("product_id", ASCENDING)])
-    db.images.create_index([("category", ASCENDING)])
-    db.images.create_index(
-        [("vector_id", ASCENDING)], unique=True, partialFilterExpression={"vector_id": {"$exists": True}}
-    )
+    ensure_indexes(db)
 
 
 def seed(root: Path = PROJECT_ROOT) -> None:

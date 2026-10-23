@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.routes.search_image import check_top_k, clean_category
+from app.routes.search_image import ERRORS, check_top_k, clean_category
 from app.search.text_search import search_by_text
 
 router = APIRouter()
@@ -17,7 +17,7 @@ class TextSearchRequest(BaseModel):
     debug: bool = False
 
 
-@router.post("/search/text")
+@router.post("/search/text", responses=ERRORS)
 async def search_text(body: TextSearchRequest, request: Request):
     app = request.app
     text = " ".join(body.text.split())

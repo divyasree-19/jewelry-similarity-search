@@ -5,6 +5,9 @@ preprocess -> [embed image | tag query image (optional) | parse text (optional)]
 -> filters (project_id, subcategory, optional hard metal filter) -> boosts -> one result per product -> top_k.
 
 similarity_score in each result is the image cosine (for display); results are ordered by the fused score.
+
+Qwen is optional here: if query tagging, text parsing or the VLM judge fails or is too slow, the search still
+runs without that step and the response says so (reduced_mode). Only the embedding service is required.
 """
 
 import asyncio
@@ -14,7 +17,7 @@ import uuid
 
 from fastapi import HTTPException
 
-from app.clients.llm_client import LLMError
+from app.clients.llm_client import LLMError, LLMUnavailableError
 from app.clients.vlm_client import VLMError
 from app.embed_client import EmbeddingServiceError
 import numpy as np
@@ -32,6 +35,7 @@ from app.search.query_analysis import plan_image_query
 from app.vector_index import IndexMismatchError
 
 log = logging.getLogger("search")
+EMBEDDING_DOWN = "Embedding service unavailable; try again shortly"
 
 
 def image_store_or_503(app, query_id: str):
@@ -44,6 +48,30 @@ def image_store_or_503(app, query_id: str):
 
 def indexed_categories(app, store) -> list[str]:
     return sorted(c for c, n in store.counts().items() if n and c in app.state.categories)
+
+
+def searchable_categories(app, store, category: str | None) -> list[str]:
+    """The categories this request can search. A requested category whose index was refused at load time
+    (built with other settings) is a 503; one with nothing indexed is a 404."""
+    indexed = indexed_categories(app, store)
+    if category and category in store.rejected:
+        raise HTTPException(503, f"The {category!r} index was built with a different model or preprocessing "
+                                 "settings and is not served; rebuild it with scripts/ingest.py --rebuild")
+    if category and category not in indexed:
+        raise HTTPException(404, f"No catalogue images are indexed for category {category!r}")
+    if not indexed:
+        if store.rejected:
+            raise HTTPException(503, "No category index matches the current model and preprocessing settings; "
+                                     "rebuild with scripts/ingest.py --rebuild")
+        raise HTTPException(404, "No catalogue images are indexed; run scripts/ingest.py")
+    return indexed
+
+
+def refused_warning(store) -> list[str]:
+    """Warning for searches over several categories when some indexes were refused."""
+    if not store.rejected:
+        return []
+    return [f"not searched, index does not match the current settings: {', '.join(sorted(store.rejected))}"]
 
 
 async def timed(coro):
@@ -302,11 +330,8 @@ async def search_by_image(app, data: bytes, *, category: str | None, text: str |
     warnings: list[str] = []
 
     store = image_store_or_503(app, query_id)
-    indexed = indexed_categories(app, store)
-    if category and category not in indexed:
-        raise HTTPException(404, f"No catalogue images are indexed for category {category!r}")
-    if not indexed:
-        raise HTTPException(404, "No catalogue images are indexed; run scripts/ingest.py")
+    indexed = searchable_categories(app, store, category)
+    reduced: list[str] = []  # optional Qwen steps that were skipped
 
     try:
         image = await asyncio.to_thread(preprocess, data, app.state.preprocess_options)
@@ -325,7 +350,8 @@ async def search_by_image(app, data: bytes, *, category: str | None, text: str |
     if want_tags:
         calls["tag_query"] = asyncio.wait_for(app.state.vlm_client.tag(png), settings.search_query_tagging_timeout_seconds)
     if text:
-        calls["parse_text"] = app.state.llm_client.parse_query(text)
+        calls["parse_text"] = asyncio.wait_for(app.state.llm_client.parse_query(text),
+                                               settings.llm_query_timeout_seconds)
     outcomes = dict(zip(calls, await asyncio.gather(*(timed(call) for call in calls.values()))))
     for step, (_, ms) in outcomes.items():
         timer.record(step, ms)
@@ -334,7 +360,7 @@ async def search_by_image(app, data: bytes, *, category: str | None, text: str |
     vector, query_features = outcomes["embed"][0], {}
     if isinstance(vector, Exception):
         log.error("query %s: %s", query_id, vector)
-        raise HTTPException(502, "Embedding service is unavailable; try again shortly")
+        raise HTTPException(503, EMBEDDING_DOWN)
     if features:
         vector, query_features = vector
     query_tags = None
@@ -342,6 +368,7 @@ async def search_by_image(app, data: bytes, *, category: str | None, text: str |
         result = outcomes["tag_query"][0]
         if isinstance(result, (VLMError, asyncio.TimeoutError)):
             warnings.append("query image tagging failed; searched without tag boosts")
+            reduced.append("query tagging")
             log.warning("query %s: query tagging failed: %r", query_id, result)
         elif isinstance(result, Exception):
             raise result
@@ -350,9 +377,12 @@ async def search_by_image(app, data: bytes, *, category: str | None, text: str |
     parsed = None
     if "parse_text" in outcomes:
         result = outcomes["parse_text"][0]
-        if isinstance(result, LLMError):
-            warnings.append("could not understand the text; searched by image only")
-            log.warning("query %s: text parsing failed: %s", query_id, result)
+        if isinstance(result, (LLMError, asyncio.TimeoutError)):
+            if isinstance(result, (LLMUnavailableError, asyncio.TimeoutError)):
+                reduced.append("text refinement")
+            else:  # Qwen answered, but not with usable JSON
+                warnings.append("could not understand the text; searched by image only")
+            log.warning("query %s: text parsing failed: %r", query_id, result)
         elif isinstance(result, Exception):
             raise result
         else:
@@ -365,7 +395,7 @@ async def search_by_image(app, data: bytes, *, category: str | None, text: str |
         )
     except EmbeddingServiceError as exc:
         log.error("query %s: category detection failed: %s", query_id, exc)
-        raise HTTPException(502, "Embedding service is unavailable; try again shortly")
+        raise HTTPException(503, EMBEDDING_DOWN)
     timer.lap("analyse")
 
     response = {
@@ -408,6 +438,8 @@ async def search_by_image(app, data: bytes, *, category: str | None, text: str |
         timer.lap("rank")
         if settings.feature_vlm_judge and results:
             response["vlm_judge"] = await judge_top(app, results, png)
+            if response["vlm_judge"]["failed"]:
+                reduced.append("VLM judge")
             timer.lap("vlm_judge")
         response["results"] = public(results)
         response.update(score_meaning(app, plan.mode))
@@ -417,6 +449,11 @@ async def search_by_image(app, data: bytes, *, category: str | None, text: str |
             hybrid_info["rescored"] = rescored
         if debug:
             response["debug"] = {"plan": plan.debug(), "hybrid": hybrid_info, "flags": flags(settings)}
+    if not category:
+        warnings += refused_warning(store)
+    response["reduced_mode"] = bool(reduced)
+    if reduced:
+        warnings.insert(0, f"Reduced mode: Qwen is unavailable or slow; searched without {', '.join(reduced)}")
     if warnings:
         response["warnings"] = warnings
     response["timings_ms"] = timer.finish()

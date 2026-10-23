@@ -1,5 +1,39 @@
+# Whole stack: `docker compose up -d --build` (see README "Run with Docker"). Every setting comes from .env.
+# Qwen3-VL (VLM_SERVICE_URL) runs on a remote GPU server and is not part of this stack.
+
+# Container logs rotate (Docker keeps them forever by default): 5 files of 10 MB per service
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+# Shared by the backend and the tools service (same image; tools runs the scripts and tests)
+x-backend: &backend
+  <<: *logging
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  image: jewellery-search-backend
+  env_file: .env
+  environment: &backend-env
+    # Inside the compose network; these override the localhost URLs in .env, which are for running locally
+    EMBED_SERVICE_URL: http://siglip2-api:8000
+    SIGLIP2_384_SERVICE_URL: http://siglip2-api-384:8000
+    MONGO_URI: mongodb://mongodb:27017
+    FAISS_INDEX_DIR: /app/data/faiss_index
+    CATALOGUE_DIR: /app/data/catalogue
+    FEATURES_DIR: /app/data/features
+  depends_on:
+    mongodb:
+      condition: service_healthy
+    siglip2-api:
+      condition: service_healthy
+
 services:
   mongodb:
+    <<: *logging
     image: mongo:8.2   # 8.0 refuses to start on Linux kernel >= 6.19 (SERVER-121912)
     container_name: jewellery-mongodb
     ports:
@@ -14,6 +48,7 @@ services:
     restart: unless-stopped
 
   siglip2-api:
+    <<: *logging
     build: ./ai-service
     image: siglip2-api
     container_name: siglip2-api
@@ -23,6 +58,7 @@ services:
       MODEL_PATH: /models
     volumes:
       - ${SIGLIP_MODEL_DIR:?set SIGLIP_MODEL_DIR in .env}:/models:ro
+    mem_limit: ${SIGLIP_MEM_LIMIT:-3g}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -33,6 +69,7 @@ services:
 
   # EMBED_BACKEND=siglip2_384: same image, 384 px weights. Started only with --profile siglip384.
   siglip2-api-384:
+    <<: *logging
     image: siglip2-api
     container_name: siglip2-api-384
     profiles: ["siglip384"]
@@ -41,7 +78,8 @@ services:
     environment:
       MODEL_PATH: /models
     volumes:
-      - ${SIGLIP_384_MODEL_DIR:?set SIGLIP_384_MODEL_DIR in .env}:/models:ro
+      - ${SIGLIP_384_MODEL_DIR:-./data/no-384-model}:/models:ro
+    mem_limit: ${SIGLIP_MEM_LIMIT:-3g}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -49,6 +87,53 @@ services:
       start_period: 60s
       retries: 5
     restart: unless-stopped
+
+  backend:
+    <<: *backend
+    container_name: jewellery-backend
+    ports:
+      - "${BACKEND_PORT:-8001}:8001"
+    volumes:
+      # Read-only at runtime; the tools service writes them. Indexes reload when their manifest changes.
+      - ./data/catalogue:/app/data/catalogue:ro
+      - ./data/faiss_index:/app/data/faiss_index:ro
+      - ./data/features:/app/data/features:ro
+      - ./data/categories.txt:/app/data/categories.txt:ro
+      - ./config:/app/config:ro
+    mem_limit: ${BACKEND_MEM_LIMIT:-2g}
+    restart: unless-stopped
+
+  frontend:
+    <<: *logging
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
+        VITE_MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+    image: jewellery-search-frontend
+    container_name: jewellery-frontend
+    ports:
+      - "${FRONTEND_PORT:-8090}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Scripts and tests, e.g. `docker compose run --rm tools scripts/ingest.py` (see README).
+  # Runs as your user so files it writes under data/, eval/ and config/ stay yours.
+  tools:
+    <<: *backend
+    profiles: ["tools"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    working_dir: /app
+    entrypoint: ["python"]
+    environment:
+      <<: *backend-env
+      TEST_MONGO_URI: mongodb://mongodb:27017
+      HOME: /tmp
+    volumes:
+      - ./data:/app/data
+      - ./eval:/app/eval
+      - ./config:/app/config
 
 volumes:
   mongo_data:

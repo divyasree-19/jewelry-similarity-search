@@ -41,14 +41,19 @@ class CategoryIndexes:
     dimension: int | None = None
     indexes: dict[str, faiss.IndexIDMap] = field(default_factory=dict)
     created_at: str | None = None
+    rejected: dict[str, str] = field(default_factory=dict)  # category -> why it was not loaded (strict=False)
 
     # ---- persistence -------------------------------------------------------------------------
 
     @classmethod
-    def load_or_create(cls, root: Path, model_name: str, embedding_version: str, preprocess_version: str) -> "CategoryIndexes":
+    def load_or_create(cls, root: Path, model_name: str, embedding_version: str, preprocess_version: str,
+                       dimension: int | None = None, strict: bool = True) -> "CategoryIndexes":
         """Load the indexes for this model/version, or start empty if none exist yet.
 
-        Raises IndexMismatchError if the stored manifest records a different preprocessing version.
+        The manifest must record the same model, embedding version, preprocessing version and (if given)
+        dimension, and each index file must match its manifest entry. On a mismatch, strict mode (scripts)
+        raises IndexMismatchError; otherwise (the search API) the affected categories are left out and the
+        reason is kept in `rejected`, so the other categories are still served.
         """
         store = cls(model_name, embedding_version, preprocess_version)
         directory = store.directory(root)
@@ -57,20 +62,32 @@ class CategoryIndexes:
             return store
 
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        for key, expected in (
-            ("model", model_name), ("embedding_version", embedding_version), ("preprocess_version", preprocess_version)
-        ):
-            if manifest.get(key) != expected:
-                raise IndexMismatchError(
-                    f"{manifest_path} has {key}={manifest.get(key)!r}, current settings give {expected!r}; "
-                    "run with --rebuild"
-                )
+        expected = {"model": model_name, "embedding_version": embedding_version,
+                    "preprocess_version": preprocess_version}
+        if dimension is not None:
+            expected["dimension"] = dimension
+        for key, value in expected.items():
+            if manifest.get(key) != value:
+                reason = (f"{manifest_path} has {key}={manifest.get(key)!r}, current settings give {value!r}; "
+                          "run with --rebuild")
+                if strict:
+                    raise IndexMismatchError(reason)
+                store.rejected = {category: reason for category in manifest.get("categories", {})}
+                return store
         store.dimension = manifest["dimension"]
         store.created_at = manifest.get("created_at")
         for category, info in manifest["categories"].items():
-            index = faiss.read_index(str(directory / info["file"]))
-            if index.ntotal != info["count"] or index.d != store.dimension:
-                raise IndexMismatchError(f"{category}: index file does not match {manifest_path}; run with --rebuild")
+            try:
+                index = faiss.read_index(str(directory / info["file"]))
+                matches = index.ntotal == info["count"] and index.d == store.dimension
+            except RuntimeError:  # missing or unreadable file
+                matches = False
+            if not matches:
+                reason = f"{category}: index file does not match {manifest_path}; run with --rebuild"
+                if strict:
+                    raise IndexMismatchError(reason)
+                store.rejected[category] = reason
+                continue
             store.indexes[category] = index
         return store
 

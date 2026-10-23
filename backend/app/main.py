@@ -7,11 +7,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pymongo import AsyncMongoClient
+from pymongo.errors import PyMongoError
 
 from app.caption_store import caption_root, new_caption_store
-from app.clients.llm_client import LLMClient
+from app.clients.llm_client import LLMClient, LLMUnavailableError
 from app.clients.vlm_client import VLMClient
 from app.config import get_settings
+from app.db import ensure_indexes_async
 from app.embed_backends import make_embed_client
 from app.embed_client import EmbeddingServiceError
 from app.preprocessing import PreprocessOptions
@@ -26,6 +28,24 @@ from app.tagging import TAGGER_VERSION
 from app.vector_index import CategoryIndexes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("startup")
+
+
+async def startup_checks(app: FastAPI) -> None:
+    """Create the MongoDB indexes and load the search indexes once, so a manifest that does not match the
+    current settings is logged now (that category is refused, see IndexCache) rather than on the first query."""
+    settings = app.state.settings
+    try:
+        await ensure_indexes_async(app.state.mongo[settings.mongo_db])
+    except PyMongoError as exc:
+        log.error("could not create MongoDB indexes (searches will answer 503 until MongoDB is up): %s",
+                  str(exc).splitlines()[0])
+    store = app.state.indexes.get()
+    log.info("serving %s %s with %d vectors: %s", settings.embed_backend, settings.embed_model_name, store.total,
+             store.counts() or "nothing indexed yet, run scripts/ingest.py")
+    if store.rejected:
+        log.error("categories NOT served (index built with other settings): %s", sorted(store.rejected))
+    app.state.caption_indexes.get_or_none()
 
 
 @asynccontextmanager
@@ -39,9 +59,11 @@ async def lifespan(app: FastAPI):
     app.state.indexes = IndexCache(
         settings.faiss_index_dir, lambda: CategoryIndexes(
             settings.embed_model_name, settings.embed_version, app.state.preprocess_options.signature), "image",
+        settings.expected_dimension,
     )
     app.state.caption_indexes = IndexCache(
-        caption_root(settings), lambda: new_caption_store(settings, TAGGER_VERSION), "caption")
+        caption_root(settings), lambda: new_caption_store(settings, TAGGER_VERSION), "caption",
+        settings.expected_dimension)
     app.state.category_detector = CategoryDetector()
     app.state.reranker = RerankerCache(settings)
     app.state.judge_cache = JudgeCache(settings.vlm_judge_cache_size)
@@ -56,6 +78,7 @@ async def lifespan(app: FastAPI):
             "--feature tiles --grid %d. Searching without region rerank.", grid, grid, grid)
     app.state.vlm_client = VLMClient.from_settings(settings)
     app.state.llm_client = LLMClient.from_settings(settings)
+    await startup_checks(app)
     yield
     await app.state.embed_client.aclose()
     await app.state.vlm_client.aclose()
@@ -64,6 +87,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Jewellery Search Backend", lifespan=lifespan)
+_openapi = app.openapi
+
+
+def openapi() -> dict:
+    """FastAPI documents validation errors as 422, but validation_error() below answers 400; drop the 422s."""
+    schema = _openapi()
+    for operations in schema["paths"].values():
+        for operation in operations.values():
+            operation.get("responses", {}).pop("422", None)
+    return schema
+
+
+app.openapi = openapi
 app.add_middleware(
     CORSMiddleware, allow_origins=get_settings().cors_origins, allow_methods=["GET", "POST"], allow_headers=["*"]
 )
@@ -76,6 +112,26 @@ async def validation_error(request: Request, exc: RequestValidationError):
     """Missing or malformed form fields are a 400 with a readable message, e.g. "category: Field required"."""
     messages = [f"{'.'.join(str(p) for p in err['loc'] if p not in ('body', 'query'))}: {err['msg']}" for err in exc.errors()]
     return JSONResponse({"detail": "; ".join(messages)}, status_code=400)
+
+
+# A dependency failing anywhere is a readable 503, never a 500. The search flows catch these themselves;
+# these handlers are the safety net for any path that does not.
+@app.exception_handler(EmbeddingServiceError)
+async def embedding_down(request: Request, exc: EmbeddingServiceError):
+    logging.getLogger("search").error("embedding service error: %s", exc)
+    return JSONResponse({"detail": "Embedding service unavailable; try again shortly"}, status_code=503)
+
+
+@app.exception_handler(PyMongoError)
+async def mongo_down(request: Request, exc: PyMongoError):
+    logging.getLogger("search").error("MongoDB error: %s", str(exc).splitlines()[0])
+    return JSONResponse({"detail": "Catalogue database is unavailable; try again shortly"}, status_code=503)
+
+
+@app.exception_handler(LLMUnavailableError)
+async def llm_down(request: Request, exc: LLMUnavailableError):
+    logging.getLogger("search").error("query parser error: %s", exc)
+    return JSONResponse({"detail": "The query parser (Qwen) is unavailable; try again shortly"}, status_code=503)
 
 
 async def check_mongo(app: FastAPI) -> dict:
@@ -94,7 +150,13 @@ async def check_embedding_service(app: FastAPI) -> dict:
         return {"status": "error", "backend": app.state.settings.embed_backend, "error": str(exc)}
 
 
-@app.get("/health")
+def index_status(app: FastAPI) -> dict:
+    """Vectors per served category, and categories refused because their index does not match the settings."""
+    store = app.state.indexes.get()
+    return {"served": store.counts(), "refused": sorted(store.rejected)}
+
+
+@app.get("/health", responses={503: {"description": "Degraded: MongoDB or the embedding service is down"}})
 async def health():
     settings = app.state.settings
     dependencies = {
@@ -108,5 +170,6 @@ async def health():
         "embed_model": settings.embed_model_name,
         "embed_version": settings.embed_version,
         "dependencies": dependencies,
+        "indexes": index_status(app),
     }
     return JSONResponse(body, status_code=200 if healthy else 503)

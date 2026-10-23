@@ -36,7 +36,8 @@ class VariantIndexCache(IndexCache):
     """IndexCache for a gray/edge store (vector lookup by vector_id comes from IndexCache.vectors)."""
 
     def __init__(self, settings, variant: str, signature: str):
-        super().__init__(variant_root(settings, variant), lambda: new_variant_store(settings, signature), variant)
+        super().__init__(variant_root(settings, variant), lambda: new_variant_store(settings, signature), variant,
+                         settings.expected_dimension)
 
 
 def feature_similarity(query_vector, candidate_vectors: dict[int, np.ndarray]) -> dict[int, float]:

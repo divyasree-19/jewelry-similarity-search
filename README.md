@@ -1,45 +1,183 @@
 # Jewellery visual search
 
-Upload a jewellery photo, get catalogue items with the same design. Built in stages (0–12);
-see the implementation doc for the full plan.
+Upload a jewellery photo (optionally with a refinement like "similar but in silver"), or type a description, and
+get the catalogue products with the same design. Proof of concept built in stages 0–12; the implementation doc
+has the full plan. **Results and limits: [docs/final_eval_report.md](docs/final_eval_report.md).**
+
+## Architecture
+
+```
+ browser ──► frontend (nginx, React test harness)            :8090
+    │
+    └─────► backend (FastAPI)                                 :8001
+              ├─ SigLIP 2 Base 224 embedding service (CPU)    :8000   image + text vectors
+              ├─ MongoDB                                      :27017  catalogue metadata, Qwen tags, vector IDs
+              ├─ FAISS indexes on disk (data/faiss_index)             per category: image vectors, caption vectors
+              ├─ region tile store (data/features)                    2×2 tiles for re-scoring the top 50
+              └─ Qwen3-VL-8B, remote GPU server (VLM_SERVICE_URL)     query parsing; catalogue tagging (offline)
+```
+
+- **Image search:**
+  1. Check and preprocess the photo.
+  2. Embed it with SigLIP (plus 2×2 region tiles).
+  3. Use the given category, or detect it (and ask the user when unsure).
+  4. Search that category's image index and caption index, and fuse them (RRF).
+  5. Boost matching tags and re-score the top 50 by region.
+  6. Return one result per product.
+- **Text search:** Qwen parses the text, SigLIP embeds it, and the same retrieval runs, scored by the tuned
+  reranker (weights v2).
+- **Offline, per catalogue image** (`scripts/`):
+  1. Embed it (`ingest.py`).
+  2. Tag it with Qwen (`tag_catalogue.py`).
+  3. Embed the tag description (`build_caption_index.py`).
+  4. Embed the region tiles (`build_feature_indexes.py`).
+- **Degradation:** without Qwen, image search still works ("reduced mode"). Without SigLIP or MongoDB, the API
+  answers a readable 503, never a 500.
+
+## Documentation
+
+| Document | For |
+|---|---|
+| [docs/final_eval_report.md](docs/final_eval_report.md) | Client review: accuracy vs the Stage 6 baseline, latency, features in use, limits, open decisions |
+| [docs/integration_notes.md](docs/integration_notes.md) + [docs/openapi.json](docs/openapi.json) | Integrating the API: contracts, error codes, IDs, Vertex AI vs SigLIP, production checklist |
+| [docs/runbook_add_catalogue.md](docs/runbook_add_catalogue.md) | Adding and removing catalogue images and products |
+| [docs/runbook_rebuild_index.md](docs/runbook_rebuild_index.md) | Full rebuild after a model, preprocessing or tagger change |
+| [docs/runbook_operations.md](docs/runbook_operations.md) | Health, logs, restarts, reranker weights, backup and restore |
+| `eval/results/load_test.md` | Load test (git-ignored like all of `eval/results/`; regenerate with `scripts/load_test.py`) |
+| `eval/DECISION.md` | Stage 6 model decision (SigLIP 224 vs 384 vs Vertex) |
 
 ## Layout
 
 ```
-ai-service/   SigLIP 2 embedding API (FastAPI, Docker) — copied from ~/siglip2-base
-backend/      Search backend (FastAPI, run locally in a venv)
-frontend/     React + Vite test harness (Stage 11, empty for now)
-data/         Catalogue images and FAISS indexes (git-ignored)
-scripts/      Ingestion / maintenance scripts
-eval/         Evaluation sets and results
+ai-service/   SigLIP 2 embedding API (FastAPI, Docker)
+backend/      Search backend (FastAPI); its Docker image also runs the scripts and tests ("tools" service)
+frontend/     React + Vite test harness (Stage 11), served by nginx in Docker
+data/         Catalogue images, FAISS indexes and feature stores (git-ignored, built by the scripts)
+config/       Re-ranker weights (reranker_weights_<version>.json)
+scripts/      Dataset, ingestion, tagging and index scripts; run_tests.sh
+eval/         Evaluation sets, run_eval.py and results
+docs/         Final report, integration notes, OpenAPI file, runbooks
 ```
 
-## Setup
+## Run with Docker (fresh machine)
+
+Needs Docker with Compose v2, about 12 GB of disk and internet access (model weights, sample images, Qwen).
+Qwen3-VL runs on a remote GPU server (`VLM_SERVICE_URL`); it is not part of the stack. Without a Qwen key, image
+search works, but catalogue tagging (step 7) and text search do not.
+
+1. **Get the code.**
+   ```bash
+   git clone <repo-url> jewellery-search && cd jewellery-search
+   ```
+2. **Download the SigLIP 2 weights** (1.5 GB, once; only Docker needed). Use any folder outside the repo:
+   ```bash
+   mkdir -p ~/siglip2-base/model
+   docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v ~/siglip2-base/model:/model python:3.12-slim \
+     sh -c 'pip install -q --user huggingface_hub && python -c "from huggingface_hub import snapshot_download; snapshot_download(\"google/siglip2-base-patch16-224\", local_dir=\"/model\")"'
+   ```
+3. **Configure.** `cp .env.example .env`, then edit `.env`:
+   - `SIGLIP_MODEL_DIR`: the absolute path from step 2, e.g. `/home/you/siglip2-base/model` (`~` does not work here).
+   - `QWEN_API_KEY`: the key for `VLM_SERVICE_URL`.
+   - `HOST_UID` / `HOST_GID`: the output of `id -u` / `id -g`, if not 1000.
+   - If port 8001 is taken: set `BACKEND_PORT` and `VITE_API_URL` to another port (e.g. 8080 and
+     `http://localhost:8080`). If you change `FRONTEND_PORT`, add the new origin to `CORS_ORIGINS`.
+4. **Create the data folders** (otherwise Docker creates them owned by root and the scripts cannot write):
+   ```bash
+   mkdir -p data/catalogue data/faiss_index data/features
+   ```
+5. **Start the stack** (first build ~5 min):
+   ```bash
+   docker compose up -d --build
+   docker compose ps       # mongodb, siglip2-api, backend: (healthy); frontend: Up
+   ```
+   The backend log says `serving ... with 0 vectors: nothing indexed yet` until step 6.
+6. **Build the sample catalogue and the image index** (~6 min; the scripts run in the `tools` container):
+   ```bash
+   docker compose run --rm tools scripts/build_sample_dataset.py   # 71 catalogue images + 50 queries (downloads)
+   docker compose run --rm tools scripts/validate_dataset.py       # 0 error(s)
+   docker compose run --rm tools scripts/ingest.py --verify        # seeds MongoDB, embeds, "71/71 return themselves"
+   ```
+   On a brand-new machine the first `--verify` can report SigLIP timeouts while the weights are read from disk
+   for the first time. Run the same command again: it re-embeds nothing and should print 71/71.
+7. **Tag the catalogue with Qwen and build the caption index** (~2 min; needs `QWEN_API_KEY`):
+   ```bash
+   docker compose run --rm tools scripts/tag_catalogue.py          # "71/71 saved tag records valid"
+   docker compose run --rm tools scripts/build_caption_index.py    # "caption check: ok"
+   ```
+8. **Build the region tiles and restart the backend** (tiles are loaded at startup; FAISS indexes reload by themselves):
+   ```bash
+   docker compose run --rm tools scripts/build_feature_indexes.py --feature tiles --grid 2
+   docker compose restart backend
+   ```
+9. **Check.**
+   ```bash
+   curl localhost:8001/health      # "status": "ok", indexes.served has 5 categories, indexes.refused is []
+   ```
+   Open http://localhost:8090 and search with a photo from `data/queries/`.
+10. **Test and evaluate.**
+    ```bash
+    scripts/run_tests.sh                                            # every suite, in Docker
+    docker compose run --rm tools eval/run_eval.py --backend siglip2_224 --name docker_check   # R@1 90%, R@5 96%
+    ```
+
+Everyday commands: `docker compose logs -f backend`, `docker compose restart backend`, `docker compose down`
+(keeps the MongoDB volume; `down -v` deletes it). Any script runs as `docker compose run --rm tools <script> [args]`.
+
+## Run locally (development)
 
 ```bash
-cp .env.example .env          # set SIGLIP_MODEL_DIR to your local model folder (.env.backend also works for the backend)
-docker compose up -d          # MongoDB 8.2 on 27017, siglip2-api on 8000
-docker compose ps             # both should show (healthy); SigLIP takes ~15 s to load
-
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+cp .env.example .env                  # as above; .env.backend, if present, overrides it for local runs
+docker compose up -d mongodb siglip2-api
+cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8080
+
+# second terminal, from the project root
+cd frontend && cp .env.example .env && npm install && npm run dev   # http://localhost:5173
 ```
 
-All URLs, ports and paths come from `.env` (see `.env.example`). Model weights are mounted
-into the container read-only and are never copied into the repo or image.
+Scripts run from the project root with the venv active, e.g. `python scripts/ingest.py`.
+
+## Tests
+
+```bash
+scripts/run_tests.sh             # in Docker (stack running): backend, scripts + eval, frontend
+scripts/run_tests.sh --local     # same suites with backend/.venv and npm (MongoDB on localhost:27017)
+```
+
+## Evaluate
+
+The test set is 50 photo queries (`eval/queries.csv`, synthetic edge cases of public images), 20 text queries
+and 8 photo + text queries, with a fixed tune / holdout split (`scripts/make_eval_splits.py`).
+
+```bash
+E="docker compose run --rm tools eval/run_eval.py --backend siglip2_224"
+$E --name my_run                                   # 50 photo queries, category given -> eval/results/my_run.md
+$E --split holdout --name my_run_ho                # holdout only (14 photo queries)
+$E --category detect --name my_run_detect          # without the category: measures detection too
+$E --mode text --name my_text                      # text queries (needs Qwen)
+$E --mode image_text --name my_refine              # photo + refinement text
+$E --set FEATURE_REGION_RERANK=false --name no_region   # any setting can be overridden for a run
+$E --compare final_all_default my_run              # Markdown comparison of saved runs
+python scripts/load_test.py --url http://localhost:8001 --machine "laptop"   # eval/results/load_test.md
+```
+
+Each run writes `eval/results/<name>.json`, `<name>.md` and, for failures, `<name>_failures/` with a strip of
+the query, the top 5 and the expected product.
 
 ## Ports
 
-| Service | Port |
+| Service | Host port (`.env`) |
 |---|---|
-| siglip2-api | 8000 |
-| (in use by another project: paddleocr) | 8001 |
-| VLM service, Stage 7 | 8002 |
-| backend | 8080 |
-| MongoDB | 27017 |
+| siglip2-api | 8000 (`EMBED_PORT`) |
+| backend in Docker | 8001 (`BACKEND_PORT`) |
+| backend run locally (uvicorn) | 8080 |
+| frontend in Docker (nginx) | 8090 (`FRONTEND_PORT`) |
+| frontend dev server (Vite) | 5173 |
+| MongoDB | 27017 (`MONGO_PORT`) |
+| Qwen3-VL | remote (`VLM_SERVICE_URL`) |
+
+On the development laptop, port 8001 is used by another project (paddleocr), so `.env` there sets
+`BACKEND_PORT=8080`.
 
 ## Stage notes
 
@@ -512,3 +650,141 @@ python eval/run_eval.py --backend siglip2_224 --split holdout --name s10_holdout
 python eval/run_eval.py --backend siglip2_224 --split holdout --name s10_judge --set FEATURE_VLM_JUDGE=true
 cd backend && pytest -q tests/test_reranker.py tests/test_vlm_judge.py
 ```
+
+### Stage 11 — Test frontend (internal POC harness)
+A React + Vite page for trying the search API by hand. It is an internal test tool, not the client's UI.
+
+```
+frontend/src/api/search.js       searchImage(), searchText(), health(): timeout + readable errors
+frontend/src/hooks/useSearch.js  one search at a time: loading / error / result, aborts on Clear
+frontend/src/components/         Header (health), UploadBox, CategorySelect, ImageSearchTab, TextSearchTab,
+                                 Results, ResultCard, DebugPanel
+```
+
+How to run (backend on :8080 and the containers up, see Setup):
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev          # http://localhost:5173
+npm test             # API client unit tests (vitest)
+```
+
+`frontend/.env`:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VITE_API_URL` | `http://localhost:8080` | Backend base URL, no trailing slash |
+| `VITE_MAX_UPLOAD_MB` | `10` | Client-side size check; keep equal to the backend's `MAX_UPLOAD_MB` |
+| `VITE_SEARCH_TIMEOUT_MS` | `60000` | Search request timeout |
+| `VITE_HEALTH_TIMEOUT_MS` | `5000` | `/health` timeout (polled every 15 s) |
+
+**Pointing it at another backend:** set `VITE_API_URL` and restart `npm run dev`, because Vite reads `.env` at
+startup. That backend's `CORS_ORIGINS` must include `http://localhost:5173`. The dev server always uses port
+5173 (`strictPort`) for this reason. Open the page as `localhost`, not `127.0.0.1`, which is a different origin.
+
+What it does:
+- **Image search:** drag-and-drop or pick a JPEG/PNG/WebP (type and size checked before upload), category
+  "Auto-detect" or a fixed one, optional refinement text. Shows the detected category and its confidence. On a
+  low-confidence answer the top 3 categories become buttons, and clicking one re-runs the search with it.
+- **Text search:** text, optional category.
+- **Results:** image, product ID and name, category, similarity bar, attribute badges. Attributes that earned a
+  boost appear as green ✓ badges, and a "possible duplicate" badge appears for look-alikes; both come from the
+  debug block, so they need Debug on.
+- **Debug toggle** (sends `debug=true`): a table per result with the image, caption, gray and region signals,
+  boosts, the final score and labels, plus the weights version, backend and round-trip latency and the step
+  timings. With the default `RERANKER_MODES=text`, image searches are not re-ranked. Their cells then show
+  raw cosines with no weights, and the panel says so.
+- **Errors:** 400/404/413/415/502/503, timeouts and an unreachable backend each show a readable message. The
+  header dot turns red when `/health` is degraded or unreachable.
+
+Checked against the local stack in a headless browser at 1366 px and 390 px (no horizontal scroll):
+auto-detect (q001 → rings, 95%), low-confidence choice (q005 → pendants 47% / rings 23% / necklaces 17%),
+image + "similar but in silver", text "red ruby ring" with debug (weights v2), the client-side type and size
+checks, a 20×20 image (400), Clear, and SigLIP stopped (502 message, header shows embedding_service down).
+
+### Stage 12 Part A — Docker stack and failure handling
+Added: `backend/Dockerfile`, `frontend/Dockerfile` + `nginx.conf`, the full `docker-compose.yml` (mongodb,
+siglip2-api, backend, frontend, and a `tools` profile for scripts and tests), `.dockerignore` files,
+`backend/app/db.py`, `backend/tests/test_failures.py` and `scripts/run_tests.sh`. Every setting is in `.env.example`.
+
+- **Containers:**
+  - The backend runs as a non-root user with a `HEALTHCHECK` on `/health`, and waits for healthy MongoDB and SigLIP.
+  - Catalogue images, FAISS indexes, feature stores, `categories.txt` and `config/` are mounted read-only into
+    the backend. The `tools` service mounts `data/`, `eval/` and `config/` read-write and runs as `HOST_UID`.
+  - SigLIP has `SIGLIP_MEM_LIMIT` (3 GB; ~1 GB used) and the backend `BACKEND_MEM_LIMIT` (2 GB).
+  - `VITE_API_URL` is a build argument of the frontend image.
+- **MongoDB indexes at startup:** `images.product_id`, `images.category`, `images.vector_id` (unique where set)
+  and `products.category` (`app/db.py`, shared with `seed_mongo.py`). `image_id` is the image document's `_id`,
+  so it is unique already. If MongoDB is down at startup, the backend logs it and still starts.
+- **Index check at startup:** each manifest's model, embedding version, dimension (768 for SigLIP) and
+  preprocessing version are compared with the settings, and each index file with its manifest entry.
+  - A mismatch is logged as `image index for 'X' NOT SERVED: ...`, and that category answers 503 with
+    "rebuild it with scripts/ingest.py --rebuild". The other categories are still served.
+  - `/health` lists `indexes.served` and `indexes.refused`.
+  - The scripts still stop and ask for `--rebuild`.
+- **Degradation (never a 500):**
+
+  | Failure | Image search | Text search |
+  |---|---|---|
+  | SigLIP down | 503 "Embedding service unavailable" (was 502) | 503 |
+  | MongoDB down | 503 "Catalogue database is unavailable" | 503 |
+  | Qwen down or slower than `LLM_QUERY_TIMEOUT_SECONDS` (20 s) | 200, `reduced_mode: true` and a "Reduced mode: ..." warning; searched without the refinement text, query tags and VLM judge | 503 "The query parser (Qwen) is unavailable or too slow" (was: raw-text fallback) |
+  | Qwen answers but the reply is unusable | 200, "could not understand the text" warning | 200, raw text searched (unchanged) |
+  | `vector_id` with no MongoDB record | candidate skipped and logged | same |
+
+  Exception handlers turn any uncaught SigLIP, MongoDB or Qwen-unavailable error into the same 503s.
+- **Settings:** `KEY=` with an empty value now means "use the default" (`env_ignore_empty`). New settings:
+  `LLM_QUERY_TIMEOUT_SECONDS`, `EMBED_DIMENSION` (tests only), and the compose ports and memory limits.
+  `SIGLIP_384_MODEL_DIR` is optional; leaving it unset no longer breaks every `docker compose` command.
+- **Tests:** `test_failures.py` has 20 tests:
+  - SigLIP down: image search, text search and category detection.
+  - MongoDB down, including at startup.
+  - Qwen down or slow: image search in reduced mode (refinement, query tagging, VLM judge); text search 503.
+  - A vector with no MongoDB record.
+  - Corrupt, oversized and wrong-type uploads; an empty category index.
+  - Mismatched manifests (per file, and dimension / preprocessing / version / model).
+  - Running ingest twice: same vector IDs, no duplicates.
+
+  `scripts/run_tests.sh`: backend 190 passed locally; in Docker, 188 passed and 2 skipped (gray index and 3×3
+  tiles, which are not built by default). Also scripts + eval 21 and frontend 11.
+
+Fresh-machine test (2026-10-20, this laptop):
+- **Setup:** a copy of exactly the files git ships, the weights downloaded with the step 2 command (byte-identical
+  to the ones in use), a new MongoDB volume, and `BACKEND_PORT=8080` (8001 is taken here). README steps 1–10
+  followed as written.
+- **Stack:** up in 74 s, all containers healthy.
+- **Catalogue build:** 71 images and 50 queries, 0 validation errors. The first `ingest --verify` timed out on
+  7 self-searches (cold weights) and the rerun gave 71/71, as step 6 now says. Tags were 71/71 valid,
+  the caption check ok, and 2×2 tiles were built.
+- **Checks:**
+  - Browser test through nginx: the Stage 11 checklist, all passing.
+  - `run_tests.sh` in Docker: all suites passed.
+  - `run_eval.py` in Docker: R@1 90%, R@5 96%, R@10 100%, MRR@10 0.934 (Stage 9/10 recorded 90% / 96% / 0.931).
+- **Failures on the live stack:**
+  - SigLIP stopped: 503 in the UI, and the header shows `embedding_service down`.
+  - MongoDB stopped: 503 in 3–4 s, and search recovers when it is back.
+  - Qwen URL refused: image + text search returns 200 in reduced mode (2.6 s), text search 503.
+  - Qwen URL hanging: the same answers, capped at 20 s.
+
+
+### Stage 12 Part B — Load test, runbooks, integration notes, final report
+Added: `scripts/load_test.py`, `scripts/export_openapi.py`, and `docs/` (final report, integration notes, OpenAPI
+file, three runbooks). Error responses are now declared in the OpenAPI schema (400/404/413/415/503; the unused 422
+is dropped). Compose rotates container logs (5 × 10 MB).
+
+- **Load test (laptop):**
+  - Photo search: p50 1.2 s and ~0.8 searches/s. It saturates at concurrency 5. At 10 and 20, requests queue
+    in SigLIP past `EMBED_TIMEOUT_SECONDS` and get readable 503s (10% and 72%).
+  - With `FEATURE_REGION_RERANK=false`: 0.33 s and ~3.5 searches/s, with no errors at 20.
+  - Text search: 2.1 s, scaling to 2.6 req/s at 10.
+  - The slowest step is always `embed` (SigLIP). Details: `eval/results/load_test.md`.
+- **Final evaluation (`docs/final_eval_report.md`):**
+  - Holdout R@1 86% → 93%, MRR 0.917 → 0.964.
+  - All 50: R@1 86% → 90%, R@5 94% → 96%, R@10 94% → 100%.
+  - Text: holdout R@1 100%, all 95%.
+  - New finding: region rerank lowers photo + text refinements (R@1 62% → 38% on 8 queries). This is an open
+    decision in the report.
+- **Integration notes:** they flag that the Vertex adapter supports only photo search with a given category
+  (no text or batch embedding). The client's ID formats and 7-step pipeline still need their input.

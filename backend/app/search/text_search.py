@@ -5,20 +5,22 @@ embed semantic_query with the SigLIP text encoder -> search caption index AND im
 RRF -> MongoDB metadata -> boosts on the attributes the user wrote -> one result per product -> top_k.
 
 similarity_score is the caption cosine (text vs. description), falling back to the image cosine.
-If the LLM is unavailable, the raw text is embedded and searched without attribute boosts.
+Text search needs Qwen: if it is unreachable or slower than LLM_QUERY_TIMEOUT_SECONDS the answer is a 503.
+If it answers but the reply is unusable, the raw text is embedded and searched without attribute boosts.
 """
 
+import asyncio
 import logging
 import uuid
 
 from fastapi import HTTPException
 
-from app.clients.llm_client import LLMError
+from app.clients.llm_client import LLMError, LLMUnavailableError
 from app.embed_client import EmbeddingServiceError
 from app.search.common import StepTimer
 from app.search.hybrid import hybrid_search
-from app.search.image_search import (fetch_metadata, flags, image_store_or_503, indexed_categories, public,
-                                     rank_results, score_meaning)
+from app.search.image_search import (EMBEDDING_DOWN, fetch_metadata, flags, image_store_or_503, public,
+                                     rank_results, refused_warning, score_meaning, searchable_categories)
 from app.search.query_analysis import plan_text_query
 
 log = logging.getLogger("search")
@@ -32,15 +34,16 @@ async def search_by_text(app, text: str, *, category: str | None, project_id: st
     warnings: list[str] = []
 
     store = image_store_or_503(app, query_id)
-    indexed = indexed_categories(app, store)
-    if category and category not in indexed:
-        raise HTTPException(404, f"No catalogue images are indexed for category {category!r}")
-    if not indexed:
-        raise HTTPException(404, "No catalogue images are indexed; run scripts/ingest.py")
+    indexed = searchable_categories(app, store, category)
 
     parsed = None
     try:
-        parsed = (await app.state.llm_client.parse_query(text)).tags
+        parsed = (await asyncio.wait_for(app.state.llm_client.parse_query(text),
+                                         settings.llm_query_timeout_seconds)).tags
+    except (LLMUnavailableError, asyncio.TimeoutError) as exc:
+        log.error("query %s: query parser unavailable: %r", query_id, exc)
+        raise HTTPException(503, "The query parser (Qwen) is unavailable or too slow, so text search cannot run; "
+                                 "try again shortly, or use image search")
     except LLMError as exc:
         warnings.append("could not parse the query; searched by the raw text without attribute boosts")
         log.warning("query %s: text parsing failed: %s", query_id, exc)
@@ -55,7 +58,7 @@ async def search_by_text(app, text: str, *, category: str | None, project_id: st
                                      indexed=indexed, parsed_text=parsed)
     except EmbeddingServiceError as exc:
         log.error("query %s: %s", query_id, exc)
-        raise HTTPException(502, "Embedding service is unavailable; try again shortly")
+        raise HTTPException(503, EMBEDDING_DOWN)
     plan.semantic_query = semantic_query
     timer.lap("analyse")
 
@@ -90,6 +93,8 @@ async def search_by_text(app, text: str, *, category: str | None, project_id: st
             response["candidate_signals"] = collected
         if debug:
             response["debug"] = {"plan": plan.debug(), "hybrid": hybrid_info, "flags": flags(settings)}
+    if not category:
+        warnings += refused_warning(store)
     if warnings:
         response["warnings"] = warnings
     response["timings_ms"] = timer.finish()

@@ -30,12 +30,15 @@ class IndexCache:
 
     `make_empty` returns an empty CategoryIndexes with the expected model/version/source; `root` is the folder
     that holds its <model>_<version>/ directory (FAISS_INDEX_DIR for images, FAISS_INDEX_DIR/captions for captions).
+    A category whose index does not match the current settings (or `dimension`) is not loaded; it is logged as
+    an error and listed in the store's `rejected`, and the other categories are still served.
     """
 
-    def __init__(self, root: Path, make_empty: Callable[[], CategoryIndexes], label: str):
+    def __init__(self, root: Path, make_empty: Callable[[], CategoryIndexes], label: str, dimension: int | None = None):
         self.root = Path(root)
         self.make_empty = make_empty
         self.label = label
+        self.dimension = dimension
         self._store: CategoryIndexes | None = None
         self._mtime: float | None = None
         self._matrices: dict[str, tuple[np.ndarray, dict[int, int]]] = {}
@@ -50,10 +53,13 @@ class IndexCache:
             return empty
         if self._store is None or mtime != self._mtime:
             self._store = CategoryIndexes.load_or_create(
-                self.root, empty.model_name, empty.embedding_version, empty.preprocess_version
+                self.root, empty.model_name, empty.embedding_version, empty.preprocess_version,
+                dimension=self.dimension, strict=False,
             )
             self._mtime = mtime
             log.info("loaded %s indexes: %s", self.label, self._store.counts())
+            for category, reason in self._store.rejected.items():
+                log.error("%s index for %r NOT SERVED: %s", self.label, category, reason)
         return self._store
 
     def vectors(self, category: str, vector_ids) -> dict[int, np.ndarray]:
